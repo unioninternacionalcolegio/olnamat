@@ -1,0 +1,206 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ================= ENUMS =================
+enum Role {
+  ADMINISTRADOR
+  ASISTENTE      // Cajeros / Secretarias
+  REVISADOR      // Los que suben notas
+  LIBRE
+  DELEGADO
+  REPRESENTANTE_IE
+}
+
+enum Nivel {
+  INICIAL
+  PRIMARIA
+  SECUNDARIA
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+}
+
+enum MetodoPago {
+  YAPE
+  PLIN
+  TRANSFERENCIA
+  EFECTIVO
+}
+
+enum EstadoRegistro {
+  INCOMPLETO // Inscrito en caja, falta llenar DNI y Nombres
+  COMPLETO   // Datos completos
+}
+
+enum TipoComprobante {
+  TICKET_INTERNO
+  BOLETA
+  FACTURA
+}
+
+// ================= MODELOS =================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  role          Role      @default(LIBRE)
+  dni           String?   @unique
+  celular       String?
+  institucion   String?
+  localidad     String?
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones
+  estudiantesInscritos Estudiante[] @relation("InscritosPor")
+  
+  // Diferenciación de pagos: los que hace el usuario vs los que cobra el asistente
+  pagosComoCliente     Pago[]       @relation("PagosCliente")
+  pagosCobrados        Pago[]       @relation("PagosCobrados")
+
+  accounts      Account[]
+  sessions      Session[]
+}
+
+model Pago {
+  id               String          @id @default(cuid())
+  
+  // Datos del Comprobante
+  tipoComprobante  TipoComprobante @default(TICKET_INTERNO)
+  serie            String          @default("T001")
+  correlativo      Int             @default(autoincrement())
+  
+  montoTotal       Float
+  metodo           MetodoPago
+  numeroOperacion  String?
+  fechaHoraPago    DateTime?       @default(now())
+  
+  comprobanteUrl   String?         // Opcional para pagos en efectivo en caja
+  estado           EstadoPago      @default(APROBADO)
+  
+  // Cliente (Delegado, Libre, IE)
+  clienteId        String
+  cliente          User            @relation("PagosCliente", fields: [clienteId], references: [id])
+
+  // Cajero/Asistente (quien emitió el ticket)
+  cajeroId         String?
+  cajero           User?           @relation("PagosCobrados", fields: [cajeroId], references: [id])
+  
+  estudiantes      Estudiante[]
+
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([serie, correlativo])
+}
+
+model Estudiante {
+  id               String         @id @default(cuid())
+  dni              String?        @unique
+  nombres          String?
+  apellidos        String?
+  nivel            Nivel
+  gradoOEdad       String
+  institucion      String
+  localidad        String
+  
+  estadoRegistro   EstadoRegistro @default(COMPLETO)
+
+  // Usuario que lo inscribió
+  creadorId        String
+  creador          User           @relation("InscritosPor", fields: [creadorId], references: [id])
+
+  // Pago asociado
+  pagoId           String?
+  pago             Pago?          @relation(fields: [pagoId], references: [id])
+
+  resultado        ResultadoExamen?
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model ResultadoExamen {
+  id               String     @id @default(cuid())
+  estudianteId     String     @unique
+  estudiante       Estudiante @relation(fields: [estudianteId], references: [id], onDelete: Cascade)
+  
+  correctas        Int        @default(0)
+  incorrectas      Int        @default(0)
+  enBlanco         Int        @default(0)
+  puntajeTotal     Float      @default(0)
+  horaSalida       DateTime?
+
+  revisadorId      String?
+  
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+}
+
+model ConfiguracionConcurso {
+  id                 String   @id @default(cuid())
+  nivel              Nivel
+  gradoOEdad         String
+  
+  costoRegular       Float
+  costoExtemporaneo  Float
+
+  cantidadPreguntas  Int
+  puntosCorrecto     Float
+  puntosIncorrecto   Float    
+  puntosBlanco       Float    
+  
+  horaInicio         String
+  horaFin            String
+
+  @@unique([nivel, gradoOEdad])
+}
+
+// ================= NEXTAUTH =================
+model Account {
+  id                 String  @id @default(cuid())
+  userId             String
+  type               String
+  provider           String
+  providerAccountId  String
+  refresh_token      String? @db.Text
+  access_token       String? @db.Text
+  expires_at         Int?
+  token_type         String?
+  scope              String?
+  id_token           String? @db.Text
+  session_state      String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
