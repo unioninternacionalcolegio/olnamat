@@ -5,10 +5,17 @@ import { useForm, useFieldArray } from "react-hook-form"
 import { Plus, Trash2, Calculator, Upload, Info, Image as ImageIcon } from "lucide-react"
 import { useRouter } from "next/navigation"
 import imageCompression from 'browser-image-compression'
-// IMPORTAMOS EL COMPONENTE NUEVO
 import ImportarExcel from "@/components/ImportarExcel"
 
-export default function FormInscripcion({ precios }: { precios: any[] }) {
+// MAPA DE GRADOS INTELIGENTE
+const OPCIONES_GRADOS = {
+    INICIAL: ["3 años", "4 años", "5 años"],
+    PRIMARIA: ["1er Grado", "2do Grado", "3er Grado", "4to Grado", "5to Grado", "6to Grado"],
+    SECUNDARIA: ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
+}
+
+// OJO AQUÍ: Recibimos userInstitucion como parámetro desde la página principal
+export default function FormInscripcion({ precios, userInstitucion = "Independiente" }: { precios: any[], userInstitucion?: string }) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
 
@@ -17,7 +24,14 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
 
     const { register, control, handleSubmit, watch, setValue } = useForm({
         defaultValues: {
-            alumnos: [{ nombres: "", apellidos: "", dni: "", nivel: "PRIMARIA", gradoOEdad: "1er Grado" }],
+            alumnos: [{
+                nombres: "",
+                apellidos: "",
+                dni: "",
+                nivel: "PRIMARIA",
+                gradoOEdad: "1er Grado",
+                institucion: userInstitucion // <-- COLEGIO POR DEFECTO
+            }],
             metodo: "YAPE",
             numeroOperacion: ""
         }
@@ -35,9 +49,13 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
 
     // FUNCIÓN PARA RECIBIR LOS DATOS DEL EXCEL
     const handleImportedData = (nuevosAlumnos: any[]) => {
-        // setValue pisa lo que había y pone la nueva lista completa
-        setValue("alumnos", nuevosAlumnos)
-        alert(`Se importaron ${nuevosAlumnos.length} estudiantes correctamente.`)
+        // Le inyectamos la institución del delegado a los alumnos del excel si es que no traen una
+        const alumnosConColegio = nuevosAlumnos.map(alum => ({
+            ...alum,
+            institucion: alum.institucion || userInstitucion
+        }))
+        setValue("alumnos", alumnosConColegio)
+        alert(`Se importaron ${alumnosConColegio.length} estudiantes correctamente.`)
     }
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,7 +94,7 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    alumnos: data.alumnos,
+                    alumnos: data.alumnos, // Aquí viajan todos los datos, incluida la institución de cada niño
                     pagoInfo: {
                         montoTotal: totalPagar,
                         metodo: data.metodo,
@@ -89,7 +107,7 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
             if (!res.ok) throw new Error("Error al inscribir en la base de datos")
 
             alert("¡Inscripción y voucher enviados con éxito! Espere la validación.")
-            router.push("/delegado")
+            router.push("/delegado/mis-pagos") // Lo mandamos directo a ver su pago pendiente
         } catch (error: any) {
             alert(error.message)
         } finally {
@@ -110,7 +128,7 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
 
                         <button
                             type="button"
-                            onClick={() => append({ nombres: "", apellidos: "", dni: "", nivel: "PRIMARIA", gradoOEdad: "1er Grado" })}
+                            onClick={() => append({ nombres: "", apellidos: "", dni: "", nivel: "PRIMARIA", gradoOEdad: "1er Grado", institucion: userInstitucion })}
                             className="flex items-center space-x-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition flex-1 sm:flex-none justify-center"
                         >
                             <Plus className="w-5 h-5" /> <span>Agregar Manual</span>
@@ -118,26 +136,52 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
                     </div>
                 </div>
 
-                {/* TABLA DE CAMPOS (IGUAL QUE ANTES) */}
+                {/* TABLA DE CAMPOS CORREGIDA */}
                 <div className="space-y-4">
-                    {fields.map((field, index) => (
-                        <div key={field.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 relative group">
-                            <input {...register(`alumnos.${index}.dni`)} placeholder="DNI (Opcional)" className="p-2 border rounded-lg text-sm" />
-                            <input {...register(`alumnos.${index}.nombres`)} placeholder="Nombres" className="p-2 border rounded-lg text-sm" required />
-                            <input {...register(`alumnos.${index}.apellidos`)} placeholder="Apellidos" className="p-2 border rounded-lg text-sm" required />
-                            <select {...register(`alumnos.${index}.nivel`)} className="p-2 border rounded-lg text-sm bg-white">
-                                <option value="INICIAL">INICIAL</option>
-                                <option value="PRIMARIA">PRIMARIA</option>
-                                <option value="SECUNDARIA">SECUNDARIA</option>
-                            </select>
-                            <div className="flex items-center space-x-2">
-                                <input {...register(`alumnos.${index}.gradoOEdad`)} placeholder="Grado/Edad" className="flex-1 p-2 border rounded-lg text-sm" required />
-                                <button type="button" onClick={() => remove(index)} className="text-red-400 hover:text-red-600">
-                                    <Trash2 className="w-5 h-5" />
-                                </button>
+                    {fields.map((field, index) => {
+                        // Magia: Observamos qué nivel tiene ESTA fila en tiempo real
+                        const nivelActual = alumnosWatch[index]?.nivel as keyof typeof OPCIONES_GRADOS || "PRIMARIA";
+
+                        return (
+                            <div key={field.id} className="grid grid-cols-1 md:grid-cols-6 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 relative group">
+                                <input {...register(`alumnos.${index}.dni`)} placeholder="DNI (Opcional)" className="p-2 border rounded-lg text-sm" />
+                                <input {...register(`alumnos.${index}.nombres`)} placeholder="Nombres" className="p-2 border rounded-lg text-sm uppercase" required />
+                                <input {...register(`alumnos.${index}.apellidos`)} placeholder="Apellidos" className="p-2 border rounded-lg text-sm uppercase" required />
+
+                                {/* SELECTOR DE NIVEL */}
+                                <select {...register(`alumnos.${index}.nivel`)} className="p-2 border rounded-lg text-sm bg-white font-bold text-gray-700">
+                                    <option value="INICIAL">INICIAL</option>
+                                    <option value="PRIMARIA">PRIMARIA</option>
+                                    <option value="SECUNDARIA">SECUNDARIA</option>
+                                </select>
+
+                                {/* SELECTOR DE GRADO INTELIGENTE (Cambia según el nivel de arriba) */}
+                                <select {...register(`alumnos.${index}.gradoOEdad`)} className="p-2 border rounded-lg text-sm bg-white text-gray-700" required>
+                                    {OPCIONES_GRADOS[nivelActual].map(grado => (
+                                        <option key={grado} value={grado}>{grado}</option>
+                                    ))}
+                                </select>
+
+                                {/* INSTITUCIÓN Y BOTÓN BORRAR */}
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        {...register(`alumnos.${index}.institucion`)}
+                                        placeholder="Institución Educativa"
+                                        className="flex-1 p-2 border rounded-lg text-sm uppercase"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => remove(index)}
+                                        className="text-gray-400 hover:text-red-600 transition-colors bg-white p-2 border rounded-lg"
+                                        title="Eliminar Alumno"
+                                    >
+                                        <Trash2 className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                 </div>
             </div>
 
@@ -182,7 +226,7 @@ export default function FormInscripcion({ precios }: { precios: any[] }) {
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                 />
                             </div>
-                            {previewUrl && <p className="text-[10px] text-green-600 mt-1 font-bold text-right">Imagen lista para comprimir</p>}
+                            {previewUrl && <p className="text-[10px] text-green-600 mt-1 font-bold text-right">Imagen lista para enviar</p>}
                         </div>
                     </div>
                 </div>
