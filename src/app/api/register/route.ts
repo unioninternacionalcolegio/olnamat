@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
-import { Role } from "@prisma/client"
+import { Role, TipoColegio } from "@prisma/client" // Importamos el Enum
 
 export async function POST(req: Request) {
     try {
         const body = await req.json()
-        const { dni, nombres, apellidos, email, celular, localidad, institucion, role } = body
+        // 1. Agregamos tipoColegio a la desestructuración
+        const {
+            dni,
+            nombres,
+            apellidos,
+            email,
+            celular,
+            localidad,
+            institucion,
+            tipoColegio, // <-- Nuevo campo del formulario de registro
+            role
+        } = body
 
         // Validación básica
         if (!dni || !nombres || !apellidos || !role) {
@@ -28,17 +39,22 @@ export async function POST(req: Request) {
         // Juntar nombres y apellidos para el campo 'name'
         const fullName = `${nombres} ${apellidos}`
 
-        // Crear el usuario
+        // 2. Creamos el usuario con el nuevo campo
         const newUser = await prisma.user.create({
             data: {
                 dni,
-                name: fullName,
-                email: email || null, // Opcional
+                name: fullName.toUpperCase(), // Lo guardamos en mayúsculas para ser prolijos
+                email: email || null,
                 password: hashedPassword,
                 celular: celular || null,
                 localidad: localidad || null,
                 institucion: institucion || null,
-                role: role as Role, // Debe ser LIBRE o DELEGADO
+
+                // IMPORTANTE: Guardamos el tipo de colegio
+                // Si el frontend no lo manda, podemos forzar un default o usar el enum
+                tipoColegio: (tipoColegio as TipoColegio) || TipoColegio.ESTATAL,
+
+                role: role as Role,
             }
         })
 

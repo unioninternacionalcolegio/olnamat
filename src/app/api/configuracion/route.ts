@@ -1,3 +1,4 @@
+//app/api/configuracion/route.ts
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
@@ -11,25 +12,38 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json()
-        const { id, nivel, gradoOEdad, costoRegular, costoExtemporaneo, cantidadPreguntas, puntosCorrecto, puntosIncorrecto, puntosBlanco, horaInicio, horaFin } = body
 
-        // Preparar los datos
+        // Extraemos TODOS los campos nuevos, incluyendo los 6 precios y el turno
+        const {
+            id, nivel, gradoOEdad, turno, horaInicio, horaFin,
+            costoEstatalReg, costoEstatalExt,
+            costoParticularReg, costoParticularExt,
+            costoLibreReg, costoLibreExt,
+            cantidadPreguntas, puntosCorrecto, puntosIncorrecto, puntosBlanco
+        } = body
+
+        // Preparar los datos asegurándonos de que los números sean números
         const dataConfig = {
             nivel,
             gradoOEdad,
-            costoRegular: Number(costoRegular),
-            costoExtemporaneo: Number(costoExtemporaneo),
+            turno: turno || "Turno 1",
+            horaInicio,
+            horaFin,
+            costoEstatalReg: Number(costoEstatalReg),
+            costoEstatalExt: Number(costoEstatalExt),
+            costoParticularReg: Number(costoParticularReg),
+            costoParticularExt: Number(costoParticularExt),
+            costoLibreReg: Number(costoLibreReg),
+            costoLibreExt: Number(costoLibreExt),
             cantidadPreguntas: Number(cantidadPreguntas),
             puntosCorrecto: Number(puntosCorrecto),
             puntosIncorrecto: Number(puntosIncorrecto),
             puntosBlanco: Number(puntosBlanco),
-            horaInicio,
-            horaFin
         }
 
         let resultado;
 
-        // Si mandamos un ID, actualizamos. Si no, verificamos si ya existe ese nivel/grado y lo creamos o actualizamos
+        // Si mandamos un ID, actualizamos. Si no, verificamos si ya existe ese nivel/grado y lo actualizamos
         const existe = await prisma.configuracionConcurso.findFirst({
             where: { nivel, gradoOEdad }
         })

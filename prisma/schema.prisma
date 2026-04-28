@@ -47,34 +47,40 @@ enum TipoComprobante {
   BOLETA
   FACTURA
 }
-
+enum TipoColegio {
+  ESTATAL
+  PARTICULAR
+  LIBRE
+}
 // ================= MODELOS =================
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  password      String?
-  role          Role      @default(LIBRE)
-  dni           String?   @unique
-  celular       String?
-  institucion   String?
-  localidad     String?
+  id                   String       @id @default(cuid())
+  name                 String?
+  email                String?      @unique
+  emailVerified        DateTime?
+  image                String?
+  password             String?
+  role                 Role         @default(LIBRE)
+  dni                  String?      @unique
+  celular              String?
+  institucion          String?
+  localidad            String?
+  
+  // NUEVO: Usamos el Enum para el tipo de colegio
+  tipoColegio          TipoColegio  @default(ESTATAL)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   // Relaciones
   estudiantesInscritos Estudiante[] @relation("InscritosPor")
   
-  // Diferenciación de pagos: los que hace el usuario vs los que cobra el asistente
   pagosComoCliente     Pago[]       @relation("PagosCliente")
   pagosCobrados        Pago[]       @relation("PagosCobrados")
 
-  accounts      Account[]
-  sessions      Session[]
+  accounts             Account[]
+  sessions             Session[]
 }
 
 model Pago {
@@ -130,7 +136,7 @@ model Estudiante {
   pago             Pago?          @relation(fields: [pagoId], references: [id])
 
   resultado        ResultadoExamen?
-
+  tipoColegio      TipoColegio  @default(ESTATAL)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
 }
@@ -154,23 +160,30 @@ model ResultadoExamen {
 
 model ConfiguracionConcurso {
   id                 String   @id @default(cuid())
-  nivel              Nivel
+  nivel              String
   gradoOEdad         String
   
-  costoRegular       Float
-  costoExtemporaneo  Float
-
-  cantidadPreguntas  Int
-  puntosCorrecto     Float
-  puntosIncorrecto   Float    
-  puntosBlanco       Float    
-  
+  turno              String   @default("Turno 1")
   horaInicio         String
   horaFin            String
 
-  @@unique([nivel, gradoOEdad])
-}
+  costoEstatalReg    Float    @default(10)
+  costoEstatalExt    Float    @default(15)
+  costoParticularReg Float    @default(12)
+  costoParticularExt Float    @default(17)
+  costoLibreReg      Float    @default(15)
+  costoLibreExt      Float    @default(20)
 
+  cantidadPreguntas  Int
+  puntosCorrecto     Float
+  puntosIncorrecto   Float
+  puntosBlanco       Float
+  
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([nivel, gradoOEdad, turno], name: "nivel_grado_turno")
+}
 // ================= NEXTAUTH =================
 model Account {
   id                 String  @id @default(cuid())

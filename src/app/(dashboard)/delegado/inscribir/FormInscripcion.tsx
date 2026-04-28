@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
-import { Plus, Trash2, Calculator, Upload, Info, Image as ImageIcon } from "lucide-react"
+import { Plus, Trash2, Calculator, Upload, Info, Image as ImageIcon, Clock, Building2, Ticket } from "lucide-react"
 import { useRouter } from "next/navigation"
 import imageCompression from 'browser-image-compression'
 import ImportarExcel from "@/components/ImportarExcel"
@@ -14,7 +14,6 @@ const OPCIONES_GRADOS = {
     SECUNDARIA: ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
 }
 
-// OJO AQUÍ: Recibimos userInstitucion como parámetro desde la página principal
 export default function FormInscripcion({ precios, userInstitucion = "Independiente" }: { precios: any[], userInstitucion?: string }) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
@@ -30,7 +29,8 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
                 dni: "",
                 nivel: "PRIMARIA",
                 gradoOEdad: "1er Grado",
-                institucion: userInstitucion // <-- COLEGIO POR DEFECTO
+                tipoColegio: "ESTATAL", // <-- NUEVO: Para saber qué tarifa cobrar
+                institucion: userInstitucion
             }],
             metodo: "YAPE",
             numeroOperacion: ""
@@ -40,18 +40,24 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
     const { fields, append, remove } = useFieldArray({ control, name: "alumnos" })
     const alumnosWatch = watch("alumnos")
 
+    // CALCULADORA MAESTRA: Suma según el grado Y el tipo de colegio
     const totalPagar = alumnosWatch.reduce((acc, alum) => {
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad)
-        return acc + (config ? config.costoRegular : 15)
+        if (!config) return acc + 15; // Precio por defecto si hay error
+
+        let costo = config.costoEstatalReg;
+        if (alum.tipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
+        if (alum.tipoColegio === 'LIBRE') costo = config.costoLibreReg;
+
+        return acc + costo;
     }, 0)
 
     const incentivo = Math.floor(alumnosWatch.length / 10)
 
-    // FUNCIÓN PARA RECIBIR LOS DATOS DEL EXCEL
     const handleImportedData = (nuevosAlumnos: any[]) => {
-        // Le inyectamos la institución del delegado a los alumnos del excel si es que no traen una
         const alumnosConColegio = nuevosAlumnos.map(alum => ({
             ...alum,
+            tipoColegio: alum.tipoColegio || "ESTATAL", // Por defecto estatal si viene de excel
             institucion: alum.institucion || userInstitucion
         }))
         setValue("alumnos", alumnosConColegio)
@@ -71,21 +77,13 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
 
         setLoading(true)
         try {
-            const options = {
-                maxSizeMB: 0.2,
-                maxWidthOrHeight: 1200,
-                useWebWorker: true,
-            }
-
+            const options = { maxSizeMB: 0.2, maxWidthOrHeight: 1200, useWebWorker: true }
             const compressedFile = await imageCompression(imagenVoucher, options)
 
             const formData = new FormData()
             formData.append("file", compressedFile, imagenVoucher.name)
 
-            const uploadRes = await fetch("/api/upload", {
-                method: "POST",
-                body: formData
-            })
+            const uploadRes = await fetch("/api/upload", { method: "POST", body: formData })
             const uploadData = await uploadRes.json()
 
             if (!uploadRes.ok) throw new Error(uploadData.error || "Error subiendo imagen")
@@ -94,7 +92,7 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    alumnos: data.alumnos, // Aquí viajan todos los datos, incluida la institución de cada niño
+                    alumnos: data.alumnos,
                     pagoInfo: {
                         montoTotal: totalPagar,
                         metodo: data.metodo,
@@ -107,7 +105,7 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
             if (!res.ok) throw new Error("Error al inscribir en la base de datos")
 
             alert("¡Inscripción y voucher enviados con éxito! Espere la validación.")
-            router.push("/delegado/mis-pagos") // Lo mandamos directo a ver su pago pendiente
+            router.push("/delegado/mis-pagos")
         } catch (error: any) {
             alert(error.message)
         } finally {
@@ -117,18 +115,14 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <h2 className="text-xl font-bold text-gray-800">Lista de Estudiantes</h2>
-
-                    {/* BOTONES AGRUPADOS ARRIBA */}
                     <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                         <ImportarExcel onDataImported={handleImportedData} />
-
                         <button
                             type="button"
-                            onClick={() => append({ nombres: "", apellidos: "", dni: "", nivel: "PRIMARIA", gradoOEdad: "1er Grado", institucion: userInstitucion })}
+                            onClick={() => append({ nombres: "", apellidos: "", dni: "", nivel: "PRIMARIA", gradoOEdad: "1er Grado", tipoColegio: "ESTATAL", institucion: userInstitucion })}
                             className="flex items-center space-x-2 bg-blue-50 text-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-100 transition flex-1 sm:flex-none justify-center"
                         >
                             <Plus className="w-5 h-5" /> <span>Agregar Manual</span>
@@ -136,49 +130,105 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
                     </div>
                 </div>
 
-                {/* TABLA DE CAMPOS CORREGIDA */}
-                <div className="space-y-4">
+                {/* NUEVO DISEÑO: TARJETAS DE ESTUDIANTES */}
+                <div className="space-y-6">
                     {fields.map((field, index) => {
-                        // Magia: Observamos qué nivel tiene ESTA fila en tiempo real
                         const nivelActual = alumnosWatch[index]?.nivel as keyof typeof OPCIONES_GRADOS || "PRIMARIA";
+                        const gradoActual = alumnosWatch[index]?.gradoOEdad || "1er Grado";
+                        const tipoColegioActual = alumnosWatch[index]?.tipoColegio || "ESTATAL";
+
+                        // Buscamos la configuración de ESTE alumno para mostrarle su turno y precio
+                        const configAlumno = precios.find(p => p.nivel === nivelActual && p.gradoOEdad === gradoActual);
+
+                        let costoAlumno = 0;
+                        if (configAlumno) {
+                            if (tipoColegioActual === 'ESTATAL') costoAlumno = configAlumno.costoEstatalReg;
+                            if (tipoColegioActual === 'PARTICULAR') costoAlumno = configAlumno.costoParticularReg;
+                            if (tipoColegioActual === 'LIBRE') costoAlumno = configAlumno.costoLibreReg;
+                        }
 
                         return (
-                            <div key={field.id} className="grid grid-cols-1 md:grid-cols-6 gap-3 p-4 bg-gray-50 rounded-xl border border-gray-200 relative group">
-                                <input {...register(`alumnos.${index}.dni`)} placeholder="DNI (Opcional)" className="p-2 border rounded-lg text-sm" />
-                                <input {...register(`alumnos.${index}.nombres`)} placeholder="Nombres" className="p-2 border rounded-lg text-sm uppercase" required />
-                                <input {...register(`alumnos.${index}.apellidos`)} placeholder="Apellidos" className="p-2 border rounded-lg text-sm uppercase" required />
+                            <div key={field.id} className="p-5 bg-gray-50 rounded-xl border border-gray-200 relative shadow-sm hover:shadow-md transition-shadow">
 
-                                {/* SELECTOR DE NIVEL */}
-                                <select {...register(`alumnos.${index}.nivel`)} className="p-2 border rounded-lg text-sm bg-white font-bold text-gray-700">
-                                    <option value="INICIAL">INICIAL</option>
-                                    <option value="PRIMARIA">PRIMARIA</option>
-                                    <option value="SECUNDARIA">SECUNDARIA</option>
-                                </select>
+                                {/* Botón Borrar (Flotante) */}
+                                <button
+                                    type="button"
+                                    onClick={() => remove(index)}
+                                    className="absolute -top-3 -right-3 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-full transition-colors shadow-sm"
+                                    title="Eliminar Alumno"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </button>
 
-                                {/* SELECTOR DE GRADO INTELIGENTE (Cambia según el nivel de arriba) */}
-                                <select {...register(`alumnos.${index}.gradoOEdad`)} className="p-2 border rounded-lg text-sm bg-white text-gray-700" required>
-                                    {OPCIONES_GRADOS[nivelActual].map(grado => (
-                                        <option key={grado} value={grado}>{grado}</option>
-                                    ))}
-                                </select>
-
-                                {/* INSTITUCIÓN Y BOTÓN BORRAR */}
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        {...register(`alumnos.${index}.institucion`)}
-                                        placeholder="Institución Educativa"
-                                        className="flex-1 p-2 border rounded-lg text-sm uppercase"
-                                        required
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => remove(index)}
-                                        className="text-gray-400 hover:text-red-600 transition-colors bg-white p-2 border rounded-lg"
-                                        title="Eliminar Alumno"
-                                    >
-                                        <Trash2 className="w-5 h-5" />
-                                    </button>
+                                {/* Fila 1: Datos Personales */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div className="md:col-span-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">DNI</label>
+                                        <input {...register(`alumnos.${index}.dni`)} placeholder="Opcional" className="w-full p-2.5 border rounded-lg text-sm bg-white" />
+                                    </div>
+                                    <div className="md:col-span-1 md:col-span-1.5">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nombres</label>
+                                        <input {...register(`alumnos.${index}.nombres`)} placeholder="Nombres" className="w-full p-2.5 border rounded-lg text-sm bg-white uppercase" required />
+                                    </div>
+                                    <div className="md:col-span-2 md:col-span-1.5">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Apellidos</label>
+                                        <input {...register(`alumnos.${index}.apellidos`)} placeholder="Apellidos" className="w-full p-2.5 border rounded-lg text-sm bg-white uppercase" required />
+                                    </div>
                                 </div>
+
+                                {/* Fila 2: Concurso y Colegio */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div className="md:col-span-1">
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nivel / Grado</label>
+                                        <div className="flex space-x-2">
+                                            <select {...register(`alumnos.${index}.nivel`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white font-bold text-blue-700">
+                                                <option value="INICIAL">INICIAL</option>
+                                                <option value="PRIMARIA">PRIMARIA</option>
+                                                <option value="SECUNDARIA">SECUNDARIA</option>
+                                            </select>
+                                            <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700" required>
+                                                {OPCIONES_GRADOS[nivelActual].map(grado => (
+                                                    <option key={grado} value={grado}>{grado}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="md:col-span-1">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo Colegio</label>
+                                            <select {...register(`alumnos.${index}.tipoColegio`)} className="w-full p-2.5 border rounded-lg text-sm bg-white">
+                                                <option value="ESTATAL">Estatal Nacional</option>
+                                                <option value="PARTICULAR">Particular Privado</option>
+                                                <option value="LIBRE">Alumno Libre</option>
+                                            </select>
+                                        </div>
+                                        <div className="md:col-span-2">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nombre Institución</label>
+                                            <div className="flex items-center">
+                                                <Building2 className="w-4 h-4 text-gray-400 absolute ml-3" />
+                                                <input {...register(`alumnos.${index}.institucion`)} placeholder="Institución Educativa" className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-white uppercase" required />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Fila 3: Info Automática (Turno y Precio) */}
+                                <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-3 rounded-lg border border-blue-100 text-sm">
+                                    <div className="flex items-center text-blue-800 font-medium mb-2 sm:mb-0">
+                                        <Clock className="w-4 h-4 mr-2 text-blue-500" />
+                                        {configAlumno ? (
+                                            <span><strong>{configAlumno.turno}</strong> ({configAlumno.horaInicio} - {configAlumno.horaFin})</span>
+                                        ) : (
+                                            <span className="text-red-500 italic">Configuración no encontrada para este grado</span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center text-green-700 font-bold bg-green-50 px-3 py-1 rounded-full">
+                                        <Ticket className="w-4 h-4 mr-1" />
+                                        Tarifa: S/ {costoAlumno.toFixed(2)}
+                                    </div>
+                                </div>
+
                             </div>
                         )
                     })}
@@ -226,7 +276,7 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
                                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                 />
                             </div>
-                            {previewUrl && <p className="text-[10px] text-green-600 mt-1 font-bold text-right">Imagen lista para enviar</p>}
+                            {previewUrl && <p className="text-[10px] text-green-600 mt-1 font-bold text-right">Imagen lista para comprimir</p>}
                         </div>
                     </div>
                 </div>

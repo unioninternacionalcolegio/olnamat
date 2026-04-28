@@ -1,4 +1,4 @@
-import { PrismaClient, Role, Nivel, EstadoPago, MetodoPago, EstadoRegistro, TipoComprobante } from '@prisma/client'
+import { PrismaClient, Role, Nivel, EstadoPago, MetodoPago, EstadoRegistro, TipoComprobante, TipoColegio } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
@@ -22,6 +22,7 @@ async function main() {
             password: passwordAdmin,
             role: Role.ADMINISTRADOR,
             dni: '00000000',
+            tipoColegio: TipoColegio.ESTATAL
         },
     })
 
@@ -34,6 +35,7 @@ async function main() {
             password: passwordAdmin,
             role: Role.ASISTENTE,
             dni: '00000001',
+            tipoColegio: TipoColegio.ESTATAL
         },
     })
 
@@ -46,6 +48,7 @@ async function main() {
             password: passwordAdmin,
             role: Role.REVISADOR,
             dni: '00000002',
+            tipoColegio: TipoColegio.ESTATAL
         },
     })
 
@@ -53,29 +56,51 @@ async function main() {
     // 3. CREAR CONFIGURACIONES DE EXAMEN
     // ==========================================
     await prisma.configuracionConcurso.upsert({
-        where: { nivel_gradoOEdad: { nivel: Nivel.INICIAL, gradoOEdad: '5 años' } },
+        where: {
+            nivel_grado_turno: {
+                nivel: Nivel.INICIAL,
+                gradoOEdad: '5 años',
+                turno: 'Turno 1'
+            }
+        },
         update: {},
         create: {
-            nivel: Nivel.INICIAL, gradoOEdad: '5 años',
-            costoRegular: 10, costoExtemporaneo: 15,
+            nivel: Nivel.INICIAL,
+            gradoOEdad: '5 años',
+            turno: 'Turno 1',
+            horaInicio: '09:00',
+            horaFin: '10:00',
+            costoEstatalReg: 10, costoEstatalExt: 15,
+            costoParticularReg: 12, costoParticularExt: 17,
+            costoLibreReg: 15, costoLibreExt: 20,
             cantidadPreguntas: 10, puntosCorrecto: 10, puntosIncorrecto: -1, puntosBlanco: 0,
-            horaInicio: '09:00', horaFin: '10:00'
         }
     })
 
     await prisma.configuracionConcurso.upsert({
-        where: { nivel_gradoOEdad: { nivel: Nivel.PRIMARIA, gradoOEdad: '6to Grado' } },
+        where: {
+            nivel_grado_turno: {
+                nivel: Nivel.PRIMARIA,
+                gradoOEdad: '6to Grado',
+                turno: 'Turno 2'
+            }
+        },
         update: {},
         create: {
-            nivel: Nivel.PRIMARIA, gradoOEdad: '6to Grado',
-            costoRegular: 12, costoExtemporaneo: 15,
+            nivel: Nivel.PRIMARIA,
+            gradoOEdad: '6to Grado',
+            turno: 'Turno 2',
+            horaInicio: '10:30',
+            horaFin: '12:00',
+            costoEstatalReg: 12, costoEstatalExt: 17,
+            costoParticularReg: 15, costoParticularExt: 20,
+            costoLibreReg: 18, costoLibreExt: 25,
             cantidadPreguntas: 20, puntosCorrecto: 10, puntosIncorrecto: -1, puntosBlanco: 0,
-            horaInicio: '10:30', horaFin: '12:00'
         }
     })
 
     // ==========================================
-    // 4. CREAR DELEGADO Y SUS 15 ALUMNOS
+    // 4. CREAR DELEGADO (PARTICULAR) Y SUS 15 ALUMNOS
     // ==========================================
     const delegado = await prisma.user.upsert({
         where: { dni: '11111111' },
@@ -86,11 +111,11 @@ async function main() {
             password: passwordDelegado,
             role: Role.DELEGADO,
             institucion: 'I.E. Santa Isabel',
-            localidad: 'Huancayo'
+            localidad: 'Huancayo',
+            tipoColegio: TipoColegio.PARTICULAR // <-- Delegado de colegio particular
         }
     })
 
-    // Pago del delegado (Aprobado para que pueda imprimir)
     const pagoDelegado = await prisma.pago.create({
         data: {
             montoTotal: 150,
@@ -101,7 +126,8 @@ async function main() {
             tipoComprobante: TipoComprobante.TICKET_INTERNO
         }
     })
-    // Insertar 10 alumnos COMPLETOS para el delegado
+
+    // 10 alumnos COMPLETOS
     for (let i = 1; i <= 10; i++) {
         await prisma.estudiante.create({
             data: {
@@ -111,6 +137,7 @@ async function main() {
                 nivel: Nivel.PRIMARIA,
                 gradoOEdad: '6to Grado',
                 institucion: delegado.institucion || '',
+                tipoColegio: TipoColegio.PARTICULAR, // <-- Heredan el tipo de colegio
                 localidad: delegado.localidad || '',
                 estadoRegistro: EstadoRegistro.COMPLETO,
                 creadorId: delegado.id,
@@ -119,13 +146,14 @@ async function main() {
         })
     }
 
-    // Insertar 5 alumnos INCOMPLETOS (Simulando los que compró en blanco a última hora)
+    // 5 alumnos INCOMPLETOS
     for (let i = 1; i <= 5; i++) {
         await prisma.estudiante.create({
             data: {
                 nivel: Nivel.INICIAL,
                 gradoOEdad: '5 años',
                 institucion: delegado.institucion || '',
+                tipoColegio: TipoColegio.PARTICULAR, // <-- Heredan el tipo de colegio
                 localidad: delegado.localidad || '',
                 estadoRegistro: EstadoRegistro.INCOMPLETO,
                 creadorId: delegado.id,
@@ -150,7 +178,8 @@ async function main() {
                 password: passwordLibre,
                 role: Role.LIBRE,
                 institucion: 'Independiente',
-                localidad: 'El Tambo'
+                localidad: 'El Tambo',
+                tipoColegio: TipoColegio.LIBRE // <-- Tipo de colegio LIBRE
             }
         })
 
@@ -173,6 +202,7 @@ async function main() {
                 nivel: i % 2 === 0 ? Nivel.INICIAL : Nivel.PRIMARIA,
                 gradoOEdad: i % 2 === 0 ? '5 años' : '6to Grado',
                 institucion: libre.institucion || '',
+                tipoColegio: TipoColegio.LIBRE, // <-- Estudiante Libre
                 localidad: libre.localidad || '',
                 estadoRegistro: EstadoRegistro.COMPLETO,
                 creadorId: libre.id,
@@ -187,8 +217,8 @@ async function main() {
     console.log("Admin: admin@olnamat.com | Pass: 12345678")
     console.log("Caja: caja1@olnamat.com | Pass: 12345678")
     console.log("Revisor: revisor1@olnamat.com | Pass: 12345678")
-    console.log("Delegado DNI: 11111111 | Pass: 11111111")
-    console.log("Libre DNI: 22222221 | Pass: 22222221")
+    console.log("Delegado DNI: 11111111 | Pass: 11111111 (Colegio Particular)")
+    console.log("Libre DNI: 22222221 | Pass: 22222221 (Alumno Libre)")
 }
 
 main()

@@ -7,27 +7,30 @@ import { EstadoPago, EstadoRegistro } from "@prisma/client"
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions)
-        if (!session || !["DELEGADO", "REPRESENTANTE_IE"].includes(session.user.role)) {
+
+        // Verificamos sesión y roles permitidos
+        if (!session || !["ADMINISTRADOR", "DELEGADO", "REPRESENTANTE_IE", "LIBRE"].includes(session.user.role)) {
             return NextResponse.json({ error: "No autorizado" }, { status: 403 })
         }
 
         const body = await req.json()
         const { alumnos, pagoInfo } = body
 
-        // Buscamos al usuario completo en la BD
+        // Buscamos al usuario completo para obtener sus datos por defecto (localidad, tipoColegio, etc.)
         const usuarioActual = await prisma.user.findUnique({
             where: { id: session.user.id }
         })
 
-        // Iniciamos transacción
+        // Iniciamos la transacción para que si algo falla, no se guarde ni el pago ni los alumnos
         const resultado = await prisma.$transaction(async (tx) => {
+
             // 1. Crear el Registro de Pago
             const nuevoPago = await tx.pago.create({
                 data: {
                     montoTotal: Number(pagoInfo.montoTotal),
                     metodo: pagoInfo.metodo,
                     numeroOperacion: pagoInfo.numeroOperacion,
-                    comprobanteUrl: pagoInfo.comprobanteUrl, // URL temporal o de Supabase
+                    comprobanteUrl: pagoInfo.comprobanteUrl,
                     estado: EstadoPago.PENDIENTE,
                     clienteId: session.user.id,
                 }
@@ -39,11 +42,17 @@ export async function POST(req: Request) {
                     tx.estudiante.create({
                         data: {
                             dni: alum.dni || null,
-                            nombres: alum.nombres || null,
-                            apellidos: alum.apellidos || null,
+                            nombres: alum.nombres?.toUpperCase() || null,
+                            apellidos: alum.apellidos?.toUpperCase() || null,
                             nivel: alum.nivel,
                             gradoOEdad: alum.gradoOEdad,
-                            institucion: usuarioActual?.institucion || "IE Particular",
+
+                            // PRIORIDAD: 1. El colegio del alumno | 2. El colegio del delegado | 3. Genérico
+                            institucion: (alum.institucion || usuarioActual?.institucion || "IE Particular").toUpperCase(),
+
+                            // PRIORIDAD: 1. El tipo de colegio del alumno | 2. El del delegado | 3. ESTATAL
+                            tipoColegio: alum.tipoColegio || usuarioActual?.tipoColegio || "ESTATAL",
+
                             localidad: usuarioActual?.localidad || "General",
                             estadoRegistro: (alum.dni && alum.nombres) ? EstadoRegistro.COMPLETO : EstadoRegistro.INCOMPLETO,
                             creadorId: session.user.id,
@@ -58,7 +67,7 @@ export async function POST(req: Request) {
 
         return NextResponse.json(resultado)
     } catch (error: any) {
-        console.error(error)
-        return NextResponse.json({ error: "Error procesando inscripción masiva" }, { status: 500 })
+        console.error("Error en Inscripción Masiva:", error)
+        return NextResponse.json({ error: "Error procesando la inscripción" }, { status: 500 })
     }
 }

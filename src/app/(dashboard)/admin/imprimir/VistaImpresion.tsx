@@ -17,7 +17,7 @@ export default function VistaImpresion({ estudiantes }: { estudiantes: any[] }) 
     return (
         <div className="min-h-screen">
 
-            {/* CONTROLES (Se ocultan al imprimir gracias a print:hidden) */}
+            {/* CONTROLES (Se ocultan al imprimir) */}
             <div className="print:hidden bg-white p-4 rounded-xl shadow-sm border mb-6 flex flex-col md:flex-row justify-between items-center gap-4 sticky top-4 z-10">
                 <div className="flex items-center space-x-4">
                     <button onClick={() => router.back()} className="text-gray-500 hover:text-gray-800 flex items-center">
@@ -56,47 +56,64 @@ export default function VistaImpresion({ estudiantes }: { estudiantes: any[] }) 
             </div>
 
             {/* ÁREA DE IMPRESIÓN */}
-            {/* La clase print:grid-cols-2 fuerza que en el PDF salgan en 2 columnas (4 por hoja) o 1 columna (1 por hoja) */}
             <div id="print-area" className={`
-        grid gap-8 justify-items-center
-        ${formato === '4'
-                    ? 'grid-cols-1 md:grid-cols-2 print:grid-cols-2 print:gap-y-[2cm] print:gap-x-[1cm]'
-                    : 'grid-cols-1 print:grid-cols-1 print:gap-y-[15cm]' // gap grande para forzar salto de página si es 1 por hoja
+                justify-items-center
+                ${formato === '4'
+                    ? 'grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 print:gap-4'
+                    : 'flex flex-col items-center gap-8'
                 }
-      `}>
-                {estudiantes.map((est) => (
-                    <div key={est.id} className="print:break-inside-avoid">
-                        <Carnet estudiante={est} />
-                    </div>
-                ))}
+            `}>
+                {estudiantes.map((est, index) => {
+                    // Lógica para forzar salto de página:
+                    // Si es formato 1: Salta después de CADA carnet.
+                    // Si es formato 4: Salta cada 4 carnets (índices 3, 7, 11...).
+                    const saltoDePagina = formato === '1' || (formato === '4' && (index + 1) % 4 === 0)
+
+                    return (
+                        <div
+                            key={est.id}
+                            // print:break-inside-avoid evita que un carnet se parta a la mitad
+                            // print:break-after-page fuerza el salto de hoja en el PDF
+                            className={`print:break-inside-avoid ${saltoDePagina ? 'print:break-after-page' : ''}`}
+                        >
+                            <Carnet estudiante={est} />
+                        </div>
+                    )
+                })}
             </div>
 
-            {/* ESTILOS GLOBALES PARA LA IMPRESORA */}
+            {/* ESTILOS GLOBALES DEFINITIVOS PARA LA IMPRESORA */}
             <style jsx global>{`
-        @media print {
-          /* Ocultar elementos del layout principal de Next.js (Sidebar, header, etc) */
-          header, aside, nav { display: none !important; }
-          
-          /* Configurar el tamaño de la hoja A4 */
-          @page {
-            size: A4 portrait;
-            margin: 1.5cm;
-          }
+                @media print {
+                    /* 1. Ocultar ABSOLUTAMENTE TODO el diseño de la web (Sidebars, Menús, Fondos) */
+                    body * {
+                        visibility: hidden;
+                    }
 
-          /* Asegurarnos que el fondo blanco de la página principal no tape nada */
-          body { 
-            background: white !important; 
-            padding: 0 !important;
-          }
+                    /* 2. Hacer visible ÚNICAMENTE el área de impresión y lo que hay dentro */
+                    #print-area, #print-area * {
+                        visibility: visible;
+                    }
 
-          /* Eliminar márgenes del contenedor principal para usar toda la hoja */
-          main {
-            padding: 0 !important;
-            margin: 0 !important;
-            background: transparent !important;
-          }
-        }
-      `}</style>
+                    /* 3. Mover el área de impresión a la esquina superior izquierda de la hoja real */
+                    #print-area {
+                        position: absolute;
+                        left: 0;
+                        top: 0;
+                        width: 100%;
+                    }
+
+                    /* 4. Forzar que la hoja del PDF sea A4 y quitar márgenes extraños */
+                    @page {
+                        size: A4 portrait;
+                        margin: 1cm; /* Margen limpio para que no choque con los bordes */
+                    }
+
+                    body {
+                        background: white !important;
+                    }
+                }
+            `}</style>
         </div>
     )
 }

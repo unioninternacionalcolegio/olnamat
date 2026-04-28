@@ -16,7 +16,7 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
         const map: any = {
             "3 años": "43.5%", "4 años": "47.5%", "5 años": "51.5%",
             "1er Grado": "43.5%", "2do Grado": "47.5%", "3er Grado": "51.5%",
-            "4to Grado": "55.5%", "5to Grado": "59.5%", "6to Grado": "63.5%"
+            "4to Grado": "55.5%", "5to Grado": "59.5%", "6to Grado": "65.5%"
         }
         return { left: map[grado] || "-10%" }
     }
@@ -40,28 +40,28 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
             </div>
 
             {/* Turno */}
-            <div className="absolute top-[21%] left-[60%] font-bold text-blue-900 text-[10px] uppercase">
+            <div className="absolute top-[19%] left-[70%] font-bold text-blue-900 text-[10px] uppercase">
                 MAÑANA
             </div>
 
             {/* Apellidos */}
-            <div className="absolute top-[43.5%] left-[28%] w-[40%] font-bold text-gray-900 text-xs truncate uppercase">
+            <div className="absolute top-[43.5%] left-[30%] w-[40%] font-bold text-gray-900 text-xs truncate uppercase">
                 {estudiante.apellidos}
             </div>
 
             {/* Nombres */}
-            <div className="absolute top-[54.5%] left-[28%] w-[40%] font-bold text-gray-900 text-xs truncate uppercase">
+            <div className="absolute top-[54.5%] left-[30%] w-[40%] font-bold text-gray-900 text-xs truncate uppercase">
                 {estudiante.nombres}
             </div>
 
             {/* Institución Educativa */}
-            <div className="absolute top-[65%] left-[28%] w-[40%] font-bold text-gray-900 text-[10px] uppercase leading-tight">
+            <div className="absolute top-[65%] left-[30%] w-[40%] font-bold text-gray-900 text-[10px] uppercase leading-tight">
                 {estudiante.institucion}
             </div>
 
             {/* Marcador de Nivel (X roja) */}
             <div
-                className="absolute top-[80%] font-black text-red-600 text-lg"
+                className="absolute top-[77%] font-black text-red-600 text-lg"
                 style={getNivelMarker(estudiante.nivel)}
             >
                 X
@@ -69,7 +69,7 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
 
             {/* Marcador de Grado (X roja) */}
             <div
-                className="absolute top-[80%] font-black text-red-600 text-lg"
+                className="absolute top-[77%] font-black text-red-600 text-lg"
                 style={getGradoMarker(estudiante.gradoOEdad)}
             >
                 X
