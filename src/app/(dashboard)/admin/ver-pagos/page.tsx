@@ -1,7 +1,18 @@
+import { getServerSession } from "next-auth/next"
+import { authOptions } from "@/lib/auth"
+import { redirect } from "next/navigation"
 import prisma from "@/lib/prisma"
 import ListaPagos from "./ListaPagos"
 
 export default async function VerPagosPage() {
+    const session = await getServerSession(authOptions)
+
+    // 🔒 EL CANDADO DE SEGURIDAD
+    // Si no hay sesión, o si el rol NO ES Administrador ni Asistente (Secretaria), lo pateamos.
+    if (!session || !["ADMINISTRADOR", "ASISTENTE"].includes(session.user.role)) {
+        redirect("/delegado") // Lo mandamos a su propio panel para que no husmee
+    }
+
     // Traemos los pagos, dando prioridad a los PENDIENTES
     const pagos = await prisma.pago.findMany({
         include: {
@@ -11,7 +22,7 @@ export default async function VerPagosPage() {
             }
         },
         orderBy: [
-            { estado: 'desc' }, // PENDIENTES suelen ir primero alfabéticamente si manejas bien los strings
+            { estado: 'desc' },
             { createdAt: 'desc' }
         ]
     })

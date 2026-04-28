@@ -2,23 +2,96 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, School, UserPlus, Users, CreditCard, Eye, LogOut, Settings } from "lucide-react"
+import {
+    Home,
+    Users,
+    UserPlus,
+    CreditCard,
+    Eye,
+    Settings,
+    LayoutDashboard,
+    ClipboardList,
+    School,
+    LogOut // <-- AQUÍ ESTÁ EL ÍCONO QUE FALTABA
+} from "lucide-react"
 import { signOut } from "next-auth/react"
 
 export default function Sidebar({ userRole }: { userRole: string }) {
     const pathname = usePathname()
 
-    // Menú basado en tu imagen, adaptado para que se muestre según el rol
     const menuItems = [
-        { name: "Home", href: "/admin", icon: Home, roles: ["ADMINISTRADOR", "ASISTENTE", "DELEGADO", "LIBRE"] },
-        { name: "Datos del Colegio", href: "/admin/colegio", icon: School, roles: ["DELEGADO", "REPRESENTANTE_IE"] },
-        { name: "Inscripción Asesores", href: "/admin/asesores", icon: UserPlus, roles: ["ADMINISTRADOR", "DELEGADO"] },
-        { name: "Inscripción Alumnos", href: "/admin/alumnos", icon: Users, roles: ["ADMINISTRADOR", "DELEGADO", "ASISTENTE", "LIBRE"] },
-        { name: "Caja / Ventas Rápidas", href: "/admin/caja", icon: CreditCard, roles: ["ADMINISTRADOR", "ASISTENTE"] }, // Añadido para el cajero
-        { name: "Mis Pagos", href: "/admin/mis-pagos", icon: CreditCard, roles: ["DELEGADO", "LIBRE"] },
-        { name: "Ver Pagos", href: "/admin/ver-pagos", icon: Eye, roles: ["ADMINISTRADOR", "ASISTENTE"] },
-        { name: "Subir Notas", href: "/admin/notas", icon: Users, roles: ["ADMINISTRADOR", "REVISADOR"] },
-        { name: "Configurar Concurso", href: "/admin/configuracion", icon: Settings, roles: ["ADMINISTRADOR"] },
+        // --- RUTAS DE ADMINISTRACIÓN Y STAFF ---
+        {
+            name: "Inicio Admin",
+            href: "/admin",
+            icon: Home,
+            roles: ["ADMINISTRADOR", "ASISTENTE"]
+        },
+        {
+            name: "Lista Alumnos",
+            href: "/admin/alumnos",
+            icon: Users,
+            roles: ["ADMINISTRADOR", "ASISTENTE"]
+        },
+        {
+            name: "Validar Pagos",
+            href: "/admin/ver-pagos",
+            icon: Eye,
+            roles: ["ADMINISTRADOR", "ASISTENTE"]
+        },
+        {
+            name: "Caja / Ventas",
+            href: "/admin/caja",
+            icon: CreditCard,
+            roles: ["ADMINISTRADOR", "ASISTENTE"]
+        },
+        {
+            name: "Subir Notas",
+            href: "/admin/notas",
+            icon: ClipboardList,
+            roles: ["ADMINISTRADOR", "REVISADOR"]
+        },
+        {
+            name: "Configuración",
+            href: "/admin/configuracion",
+            icon: Settings,
+            roles: ["ADMINISTRADOR"]
+        },
+
+        // --- RUTAS DE DELEGADOS Y REPRESENTANTES ---
+        {
+            name: "Mi Panel",
+            href: "/delegado",
+            icon: LayoutDashboard,
+            roles: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"]
+        },
+        {
+            name: "Inscribir Alumnos",
+            href: "/delegado/inscribir",
+            icon: UserPlus,
+            roles: ["DELEGADO", "REPRESENTANTE_IE"]
+        },
+        {
+            name: "Mis Pagos",
+            href: "/delegado/mis-pagos",
+            icon: CreditCard,
+            roles: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"]
+        },
+        // Estas rutas están comentadas o listas para el futuro cuando crees las carpetas
+        /*
+        {
+            name: "Datos Colegio",
+            href: "/delegado/colegio",
+            icon: School,
+            roles: ["DELEGADO", "REPRESENTANTE_IE"]
+        },
+        {
+            name: "Asesores",
+            href: "/delegado/asesores",
+            icon: Users,
+            roles: ["DELEGADO", "REPRESENTANTE_IE"]
+        },
+        */
     ]
 
     const filteredMenu = menuItems.filter(item => item.roles.includes(userRole))

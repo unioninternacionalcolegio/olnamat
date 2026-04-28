@@ -13,7 +13,6 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
 
     // Función para determinar dónde poner la X en el Grado
     const getGradoMarker = (grado: string) => {
-        // Asumimos que inicial 3 años marca el "1", 4 años el "2", etc. o según tu lógica
         const map: any = {
             "3 años": "43.5%", "4 años": "47.5%", "5 años": "51.5%",
             "1er Grado": "43.5%", "2do Grado": "47.5%", "3er Grado": "51.5%",
@@ -33,11 +32,16 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
                 priority
             />
 
-            {/* OVERLAYS DE TEXTO - Ajusta los % de 'top' y 'left' para que encajen perfecto en tus cajas */}
+            {/* OVERLAYS DE TEXTO */}
+
+            {/* CÓDIGO DEL ESTUDIANTE (DNI) - Arriba a la derecha tipo H2 */}
+            <div className="absolute top-[8%] right-[5%] font-black text-gray-900 text-xl tracking-widest bg-white/50 px-2 rounded backdrop-blur-sm">
+                N° {estudiante.dni || estudiante.id.substring(0, 8)}
+            </div>
 
             {/* Turno */}
             <div className="absolute top-[21%] left-[60%] font-bold text-blue-900 text-[10px] uppercase">
-                MAÑANA {/* O la variable que corresponda */}
+                MAÑANA
             </div>
 
             {/* Apellidos */}

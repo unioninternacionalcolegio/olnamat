@@ -82,6 +82,13 @@ export default function ListaEstudiantes({ iniciales }: { iniciales: any[] }) {
                     />
                 </div>
             </div>
+            <button
+                onClick={handleImprimirTodos}
+                className="w-full sm:w-auto bg-gray-300 hover:bg-gray-400 text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center transition-colors shadow-sm"
+            >
+                <Printer className="w-4 h-4 mr-2" />
+                Imprimir Todos Aprobados
+            </button>
 
             {/* Tabla de Estudiantes */}
             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">

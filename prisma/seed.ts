@@ -101,7 +101,6 @@ async function main() {
             tipoComprobante: TipoComprobante.TICKET_INTERNO
         }
     })
-
     // Insertar 10 alumnos COMPLETOS para el delegado
     for (let i = 1; i <= 10; i++) {
         await prisma.estudiante.create({
