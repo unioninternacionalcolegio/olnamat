@@ -19,8 +19,16 @@ export async function POST(req: Request) {
         // Convertimos el archivo para poder subirlo
         const buffer = Buffer.from(await file.arrayBuffer())
 
-        // Le ponemos un nombre único para que no se sobreescriban (Ej: voucher_167890_foto.jpg)
-        const fileName = `voucher_${Date.now()}_${file.name.replace(/\s/g, '_')}`
+        // MAGIA QUIRÚRGICA: Limpiamos el nombre del archivo.
+        // 1. normalize("NFD") y el replace quitan las tildes (á -> a) y las ñ (ñ -> n)
+        // 2. El segundo replace cambia cualquier cosa que NO sea letra o número por un guión bajo
+        const safeFileName = file.name
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-zA-Z0-9.-]/g, "_")
+
+        // Le ponemos un nombre único y limpio (Ej: voucher_167890_3anosolnamat.png)
+        const fileName = `voucher_${Date.now()}_${safeFileName}`
 
         // Subimos la imagen al bucket 'vouchers'
         const { data, error } = await supabase.storage

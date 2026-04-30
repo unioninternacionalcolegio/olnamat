@@ -92,13 +92,11 @@ export default function FormInscripcion({ precios, userInstitucion = "Independie
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    alumnos: data.alumnos,
-                    pagoInfo: {
-                        montoTotal: totalPagar,
-                        metodo: data.metodo,
-                        numeroOperacion: data.numeroOperacion,
-                        comprobanteUrl: uploadData.url
-                    }
+                    estudiantes: data.alumnos,
+                    montoTotal: totalPagar,
+                    metodo: data.metodo,
+                    numeroOperacion: data.numeroOperacion,
+                    comprobanteUrl: uploadData.url
                 })
             })
 

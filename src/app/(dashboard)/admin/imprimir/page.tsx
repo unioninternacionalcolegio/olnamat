@@ -13,7 +13,7 @@ export default async function ImprimirPage({ searchParams }: { searchParams: Pro
 
     const idsArray = params.ids.split(",")
 
-    // Obtenemos los estudiantes y verificamos que su pago esté aprobado
+    // 3. Obtenemos los estudiantes y verificamos que su pago esté aprobado
     const estudiantes = await prisma.estudiante.findMany({
         where: {
             id: { in: idsArray },
@@ -33,5 +33,22 @@ export default async function ImprimirPage({ searchParams }: { searchParams: Pro
         )
     }
 
-    return <VistaImpresion estudiantes={estudiantes} />
+    // 4. TRAEMOS LAS CONFIGURACIONES (AQUÍ ESTÁN LOS TURNOS)
+    const configuraciones = await prisma.configuracionConcurso.findMany()
+
+    // 5. LA MAGIA: Le inyectamos el turno a cada estudiante
+    const estudiantesParaImprimir = estudiantes.map(est => {
+        // Buscamos la regla de su grado y nivel
+        const config = configuraciones.find(
+            c => c.nivel === est.nivel && c.gradoOEdad === est.gradoOEdad
+        )
+
+        return {
+            ...est,
+            turno: config ? config.turno : "Sin Turno" // <-- Se lo pegamos aquí
+        }
+    })
+
+    // 6. Mandamos los estudiantes ya "vitaminados" con su turno
+    return <VistaImpresion estudiantes={estudiantesParaImprimir} />
 }

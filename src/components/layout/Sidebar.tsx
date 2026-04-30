@@ -12,7 +12,8 @@ import {
     LayoutDashboard,
     ClipboardList,
     School,
-    LogOut // <-- AQUÍ ESTÁ EL ÍCONO QUE FALTABA
+    LogOut,
+    Trophy // <-- NUEVO: Ícono para los resultados
 } from "lucide-react"
 import { signOut } from "next-auth/react"
 
@@ -52,6 +53,12 @@ export default function Sidebar({ userRole }: { userRole: string }) {
             roles: ["ADMINISTRADOR", "REVISADOR"]
         },
         {
+            name: "Resultados Oficiales", // <-- NUEVO: Para el Staff
+            href: "/admin/resultados",
+            icon: Trophy,
+            roles: ["ADMINISTRADOR", "ASISTENTE", "REVISADOR"]
+        },
+        {
             name: "Configuración",
             href: "/admin/configuracion",
             icon: Settings,
@@ -77,21 +84,25 @@ export default function Sidebar({ userRole }: { userRole: string }) {
             icon: CreditCard,
             roles: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"]
         },
-        // Estas rutas están comentadas o listas para el futuro cuando crees las carpetas
-        /*
         {
-            name: "Datos Colegio",
-            href: "/delegado/colegio",
-            icon: School,
+            name: "Resultados", // <-- NUEVO: Para que vean cómo les fue a sus alumnos
+            href: "/delegado/resultados",
+            icon: Trophy,
             roles: ["DELEGADO", "REPRESENTANTE_IE"]
         },
         {
-            name: "Asesores",
-            href: "/delegado/asesores",
-            icon: Users,
-            roles: ["DELEGADO", "REPRESENTANTE_IE"]
+            name: "Mi Panel",
+            href: "/libre",
+            icon: LayoutDashboard,
+            roles: ["LIBRE"]
         },
-        */
+        {
+            name: "Resultados Oficiales",
+            href: "/libre/resultados",
+            icon: Trophy,
+            roles: ["LIBRE"]
+        },
+        // y así con cualquier otra ruta de Libre...
     ]
 
     const filteredMenu = menuItems.filter(item => item.roles.includes(userRole))

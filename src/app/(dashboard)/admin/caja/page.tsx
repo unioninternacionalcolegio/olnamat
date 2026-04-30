@@ -1,31 +1,46 @@
-import prisma from "@/lib/prisma"
+// src/app/(dashboard)/admin/caja/page.tsx
 import CajaPOS from "./CajaPOS"
+import prisma from "@/lib/prisma"
+import { getServerSession } from "next-auth"
+// OJO: Importa authOptions desde donde lo tengas configurado. 
+// Normalmente es "@/lib/auth" o "@/app/api/auth/[...nextauth]/route"
+import { authOptions } from "@/lib/auth"
 
 export default async function CajaPage() {
-    // Obtenemos a todos los usuarios que pueden comprar cupos (Delegados, IEs, Libres)
+    // 1. Obtenemos la sesión del usuario logueado (La secretaria/cajero)
+    const session = await getServerSession(authOptions)
+
+    // Si no hay sesión por alguna razón, mandamos un string vacío para que la API no explote,
+    // o el ID real del cajero.
+    const cajeroId = session?.user?.id || ""
+
+    // 2. Traemos a todos los delegados y libres
     const clientes = await prisma.user.findMany({
         where: {
-            role: { in: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"] }
+            role: { in: ["LIBRE", "DELEGADO", "REPRESENTANTE_IE"] }
         },
         select: {
             id: true,
             name: true,
             dni: true,
             institucion: true,
-            role: true
-        },
-        orderBy: { name: 'asc' }
+            role: true,
+            tipoColegio: true
+        }
     })
 
-    return (
-        <div className="max-w-6xl mx-auto space-y-6">
-            <div>
-                <h1 className="text-2xl font-bold text-gray-900">Caja Rápida / Venta Extemporánea</h1>
-                <p className="text-gray-600">Vende cupos en blanco para que el delegado los llene después.</p>
-            </div>
+    // 3. Traemos las configuraciones de precios
+    const configuraciones = await prisma.configuracionConcurso.findMany()
 
-            {/* Pasamos los clientes al componente interactivo */}
-            <CajaPOS clientes={clientes} />
+    return (
+        <div className="p-6">
+            <h1 className="text-2xl font-black mb-6">Módulo de Caja</h1>
+            {/* Pasamos TODOS los props, incluyendo el cajeroId vital */}
+            <CajaPOS
+                clientes={clientes}
+                configuraciones={configuraciones}
+                cajeroId={cajeroId}
+            />
         </div>
     )
 }

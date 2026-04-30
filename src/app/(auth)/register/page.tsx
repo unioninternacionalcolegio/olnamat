@@ -18,12 +18,28 @@ export default function RegisterPage() {
         email: "",
         celular: "",
         localidad: "",
-        institucion: "",
-        role: "LIBRE", // Por defecto Libre
+        institucion: "", // Lo iniciamos vacío
+        tipoColegio: "LIBRE", // Por defecto Libre
+        role: "LIBRE",
     })
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value })
+        const { name, value } = e.target
+
+        setFormData(prev => {
+            const newData = { ...prev, [name]: value }
+
+            // UX: Al cambiar el rol, acomodamos las opciones por defecto
+            if (name === "role") {
+                if (value === "LIBRE") {
+                    newData.tipoColegio = "LIBRE"
+                } else if (value === "DELEGADO") {
+                    newData.tipoColegio = "ESTATAL"
+                }
+            }
+
+            return newData
+        })
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -31,11 +47,19 @@ export default function RegisterPage() {
         setLoading(true)
         setError("")
 
+        // Si es libre y lo dejó en blanco, le ponemos "Independiente" por defecto para que no vaya vacío a la BD
+        const datosAEnviar = {
+            ...formData,
+            institucion: formData.institucion.trim() === "" && formData.role === "LIBRE"
+                ? "Independiente"
+                : formData.institucion
+        }
+
         try {
             const res = await fetch("/api/auth/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(datosAEnviar),
             })
 
             const data = await res.json()
@@ -45,7 +69,6 @@ export default function RegisterPage() {
             }
 
             setSuccess(true)
-            // Redirigir al login después de 2 segundos
             setTimeout(() => {
                 router.push("/login")
             }, 2000)
@@ -89,7 +112,7 @@ export default function RegisterPage() {
                                 name="role"
                                 value={formData.role}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-gray-900"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-bold bg-blue-50"
                             >
                                 <option value="LIBRE">Participante Libre (Individual)</option>
                                 <option value="DELEGADO">Delegado (Inscribiré a varios alumnos)</option>
@@ -130,7 +153,7 @@ export default function RegisterPage() {
                                 required
                                 value={formData.nombres}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 uppercase"
                             />
                         </div>
 
@@ -142,12 +165,12 @@ export default function RegisterPage() {
                                 required
                                 value={formData.apellidos}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 uppercase"
                             />
                         </div>
 
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Correo Electrónico (Opcional)</label>
                             <input
                                 name="email"
                                 type="email"
@@ -159,37 +182,55 @@ export default function RegisterPage() {
                         </div>
 
                         <div className="md:col-span-2">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Localidad / Ciudad</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Localidad / Ciudad *</label>
                             <input
                                 name="localidad"
                                 type="text"
+                                required
                                 value={formData.localidad}
                                 onChange={handleChange}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 uppercase"
                                 placeholder="Ej. Huancayo, El Tambo, etc."
                             />
                         </div>
 
-                        {formData.role === "DELEGADO" && (
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de la Institución (Opcional)</label>
-                                <input
-                                    name="institucion"
-                                    type="text"
-                                    value={formData.institucion}
-                                    onChange={handleChange}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Ej. I.E. Santa Isabel"
-                                />
-                            </div>
-                        )}
+                        {/* CAMPOS DE INSTITUCIÓN (Siempre visibles, pero requeridos según el rol) */}
+                        <div className="md:col-span-1 border-t pt-4 mt-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1 text-blue-600">
+                                {formData.role === "DELEGADO" ? "Tipo de Institución *" : "Tipo de Inst. (Opcional)"}
+                            </label>
+                            <select
+                                name="tipoColegio"
+                                value={formData.tipoColegio}
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 border border-blue-200 bg-blue-50 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                            >
+                                {formData.role === "LIBRE" && <option value="LIBRE">Independiente / Libre</option>}
+                                <option value="ESTATAL">Estatal / Nacional</option>
+                                <option value="PARTICULAR">Particular / Privado</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-1 border-t pt-4 mt-2">
+                            <label className="block text-sm font-medium text-gray-700 mb-1 text-blue-600">
+                                {formData.role === "DELEGADO" ? "Nombre Institución *" : "Nombre Inst. (Opcional)"}
+                            </label>
+                            <input
+                                name="institucion"
+                                type="text"
+                                required={formData.role === "DELEGADO"} // Obligatorio solo si es delegado
+                                value={formData.institucion}
+                                onChange={handleChange}
+                                className="w-full px-3 py-2 border border-blue-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 uppercase"
+                                placeholder={formData.role === "DELEGADO" ? "Ej. I.E. Santa Isabel" : "Déjalo en blanco si eres independiente"}
+                            />
+                        </div>
                     </div>
 
-                    <div>
+                    <div className="pt-4">
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 transition-colors"
+                            className="w-full flex justify-center py-3 px-4 border border-transparent text-sm font-bold rounded-lg text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 shadow-md transition-colors"
                         >
                             {loading ? "Registrando..." : "Crear mi cuenta"}
                         </button>
@@ -199,7 +240,7 @@ export default function RegisterPage() {
                 <div className="text-center mt-4">
                     <p className="text-sm text-gray-600">
                         ¿Ya tienes cuenta?{' '}
-                        <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
+                        <Link href="/login" className="font-bold text-blue-600 hover:text-blue-800 transition-colors">
                             Inicia sesión aquí
                         </Link>
                     </p>

@@ -83,7 +83,7 @@ export default function VistaImpresion({ estudiantes }: { estudiantes: any[] }) 
             </div>
 
             {/* ESTILOS GLOBALES DEFINITIVOS PARA LA IMPRESORA */}
-            <style jsx global>{`
+            <style jsx global suppressHydrationWarning>{`
                 @media print {
                     /* 1. Ocultar ABSOLUTAMENTE TODO el diseño de la web (Sidebars, Menús, Fondos) */
                     body * {

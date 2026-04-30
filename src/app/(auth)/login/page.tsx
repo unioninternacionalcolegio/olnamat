@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { signIn } from "next-auth/react"
+import { signIn, getSession } from "next-auth/react" // <-- Agregamos getSession
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import Image from "next/image"
@@ -28,7 +28,21 @@ export default function LoginPage() {
             setError(res.error)
             setLoading(false)
         } else {
-            router.push("/admin") // Redirige al dashboard principal, luego el middleware o layout decidirá la ruta exacta
+            // MAGIA DE RUTEO: Obtenemos la sesión recién creada para ver el rol
+            const session = await getSession()
+            const userRole = session?.user?.role
+
+            // Repartimos a los usuarios según su gafete
+            if (userRole === "ADMINISTRADOR" || userRole === "ASISTENTE" || userRole === "REVISADOR") {
+                router.push("/admin")
+            } else if (userRole === "DELEGADO" || userRole === "REPRESENTANTE_IE") {
+                router.push("/delegado") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+            } else if (userRole === "LIBRE") {
+                router.push("/libre") // <-- Así lo mandas a su propia casa
+            } else {
+                router.push("/") // Por si acaso hay un rol raro
+            }
+
             router.refresh()
         }
     }
