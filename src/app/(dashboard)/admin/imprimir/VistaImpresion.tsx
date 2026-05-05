@@ -1,3 +1,4 @@
+//app\(dashboard)\admin\imprimir\VistaImpresion.tsx
 "use client"
 
 import { useState } from "react"

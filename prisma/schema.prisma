@@ -178,12 +178,14 @@ model ConfiguracionConcurso {
   puntosCorrecto     Float
   puntosIncorrecto   Float
   puntosBlanco       Float
-  
+
+  clavesRespuestas   Json?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
   @@unique([nivel, gradoOEdad, turno], name: "nivel_grado_turno")
 }
+
 // ================= NEXTAUTH =================
 model Account {
   id                 String  @id @default(cuid())
