@@ -16,7 +16,9 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
         const map: any = {
             "3 años": "55.5%", "4 años": "51.5%", "5 años": "59.5%",
             "1er Grado": "43.5%", "2do Grado": "47.5%", "3er Grado": "51.5%",
-            "4to Grado": "55.5%", "5to Grado": "59.5%", "6to Grado": "65.5%"
+            "4to Grado": "55.5%", "5to Grado": "59.5%", "6to Grado": "65.5%",
+            "1er Año": "43%", "2do Año": "47.5%", "3er Año": "51.5%",
+            "4to Año": "55.5%", "5to Año": "59.5%"
         }
         return { left: map[grado] || "-10%" }
     }

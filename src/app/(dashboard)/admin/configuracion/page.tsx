@@ -20,6 +20,11 @@ export default async function ConfiguracionPage() {
         ]
     })
 
+    // 💉 NUEVO (Cirugía): Traemos los cupones desde la base de datos
+    const cupones = await prisma.cupon.findMany({
+        orderBy: { createdAt: 'desc' }
+    })
+
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             <div>
@@ -27,7 +32,8 @@ export default async function ConfiguracionPage() {
                 <p className="text-gray-600">Define los precios, cantidad de preguntas y reglas de calificación por cada grado.</p>
             </div>
 
-            <PanelConfiguracion dataInicial={configuraciones} />
+            {/* 💉 NUEVO (Cirugía): Pasamos los cupones al componente */}
+            <PanelConfiguracion dataInicial={configuraciones} cuponesIniciales={cupones} />
         </div>
     )
 }

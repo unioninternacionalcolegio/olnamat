@@ -31,3 +31,19 @@ textarea,
 button {
   color: #111827 !important;
 }
+
+@keyframes float {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-40px);
+  }
+}
+
+.animate-\[float_12s_ease-in-out_infinite\] {
+  animation: float 12s ease-in-out infinite;
+}

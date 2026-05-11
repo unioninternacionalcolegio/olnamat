@@ -4,6 +4,23 @@ import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/prisma"
 
+// NUEVO: Método GET para que el formulario de registro y otros puedan leer los grados
+export async function GET() {
+    try {
+        const configuraciones = await prisma.configuracionConcurso.findMany({
+            orderBy: [
+                { nivel: 'asc' },
+                { gradoOEdad: 'asc' }
+            ]
+        })
+        return NextResponse.json(configuraciones, { status: 200 })
+    } catch (error) {
+        console.error("Error obteniendo configuraciones:", error)
+        return NextResponse.json({ error: "Error al obtener las configuraciones" }, { status: 500 })
+    }
+}
+
+// TU MÉTODO POST INTACTO: Para guardar y actualizar
 export async function POST(req: Request) {
     try {
         const session = await getServerSession(authOptions)

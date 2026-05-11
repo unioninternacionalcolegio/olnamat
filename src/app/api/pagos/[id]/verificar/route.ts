@@ -1,3 +1,4 @@
+// app/api/pagos/[id]/verificar/route.ts
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
@@ -22,15 +23,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             return NextResponse.json({ error: "Estado de pago no válido" }, { status: 400 })
         }
 
-        // 3. Actualizamos solo el estado
+        // Preparar la data a actualizar
+        const dataToUpdate: any = { estado: estado as EstadoPago }
+
+        // NUEVO: Si se aprueba o rechaza, registramos QUIÉN lo hizo (cajeroId)
+        if (estado === "APROBADO" || estado === "RECHAZADO") {
+            dataToUpdate.cajeroId = session.user.id
+        }
+
+        // 3. Actualizamos el estado y asignamos el cajero
         const pagoActualizado = await prisma.pago.update({
             where: { id },
-            data: {
-                estado: estado as EstadoPago
-            }
+            data: dataToUpdate,
+            include: { cajero: true } // OBLIGATORIO: Para que el frontend pueda mostrar el nombre de quien aprobó
         })
 
-        return NextResponse.json(pagoActualizado)
+        // Devolvemos el formato exacto que espera ListaPagos.tsx
+        return NextResponse.json({
+            mensaje: `El pago fue ${estado} exitosamente.`,
+            pago: pagoActualizado
+        })
     } catch (error) {
         console.error("Error al actualizar el pago:", error)
         return NextResponse.json({ error: "Error al verificar pago" }, { status: 500 })

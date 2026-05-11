@@ -92,6 +92,9 @@ model Pago {
   correlativo      Int             @default(autoincrement())
   
   montoTotal       Float
+  descuento        Float           @default(0) // Cuánto se descontó (Para imprimir en el comprobante)
+  cuponId          String?         @unique     // ID del cupón usado
+  cupon            Cupon?          @relation(fields: [cuponId], references: [id])
   metodo           MetodoPago
   numeroOperacion  String?
   fechaHoraPago    DateTime?       @default(now())
@@ -218,4 +221,17 @@ model VerificationToken {
   token      String   @unique
   expires    DateTime
   @@unique([identifier, token])
+}
+// ================= CUPONES DE DESCUENTO =================
+model Cupon {
+  id          String   @id @default(cuid())
+  codigo      String   @unique // Aquí irá el código de 6 dígitos (Ej: "OLNA50")
+  monto       Float    // El valor del descuento (20, 50, 100 soles)
+  usado       Boolean  @default(false)
+  
+  // Relación inversa con Pago (1 a 1)
+  pago        Pago?    // Se vincula automáticamente cuando un delegado lo canjea
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }

@@ -1,40 +1,36 @@
-import FormInscripcion from "./FormInscripcion"
+import FormInscripcion from "../FormInscripcion"
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
 
-export default async function InscribirGeneralPage() {
-    // 1. Obtenemos la sesión actual
+export default async function InscribirInicialPage() {
     const session = await getServerSession(authOptions)
 
-    // Solo validamos que exista una sesión activa (sin exigir el email)
+    // 1. Corrección aquí: Validamos solo la sesión
     if (!session || !session.user) redirect("/login")
 
-    // Buscamos al delegado de forma inteligente (ya que el email es opcional)
-    // Usamos findFirst y buscamos por email, o si no tiene, por su nombre exacto
+    // 2. Corrección aquí: Buscamos por email o nombre
     const delegado = await prisma.user.findFirst({
         where: session.user.email
             ? { email: session.user.email }
             : { name: session.user.name }
     })
 
-    // 3. Traemos los precios
     const configuraciones = await prisma.configuracionConcurso.findMany()
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-black text-gray-800">Inscripción General</h1>
-                <p className="text-gray-500 text-sm">Inscribe alumnos de cualquier nivel educativo.</p>
+                <h1 className="text-2xl font-black text-blue-800">Inscripción - Nivel Inicial</h1>
+                <p className="text-gray-500 text-sm">Registra únicamente a estudiantes de 3, 4 y 5 años.</p>
             </div>
 
-            {/* AQUÍ ESTÁ LA JUGADA: Le pasamos los datos del delegado */}
             <FormInscripcion
                 precios={configuraciones}
                 userInstitucion={delegado?.institucion || "INDEPENDIENTE"}
                 userTipoColegio={delegado?.tipoColegio || "ESTATAL"}
-            // Sin nivelFijo, para que pueda elegir libremente
+                nivelFijo="PRIMARIA"
             />
         </div>
     )

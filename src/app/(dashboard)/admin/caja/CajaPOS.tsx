@@ -1,8 +1,9 @@
+// app/(dashboard)/caja/CajaPOS.tsx
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Printer, Trash2 } from "lucide-react"
+import { Printer, Trash2, Tag } from "lucide-react"
 
 type Cliente = {
     id: string,
@@ -52,6 +53,9 @@ export default function CajaPOS({
     const [faseVentaActiva, setFaseVentaActiva] = useState<"REGULAR" | "EXTEMPORANEO">("REGULAR")
 
     const [mostrarRegistroRapido, setMostrarRegistroRapido] = useState(false)
+
+    // --- ESTADO PARA EL DESCUENTO MANUAL ---
+    const [descuentoManual, setDescuentoManual] = useState<number>(0)
 
     const [nuevoLibre, setNuevoLibre] = useState({
         dni: "", nombres: "", apellidos: "", institucion: "",
@@ -142,15 +146,14 @@ export default function CajaPOS({
     }
 
     const registrarYSeleccionar = async () => {
-        if (!nuevoLibre.dni || !nuevoLibre.nombres || !nuevoLibre.gradoOEdad) {
-            return alert("Faltan datos obligatorios (DNI, Nombres o Grado).")
+        if (!nuevoLibre.nombres || !nuevoLibre.gradoOEdad) {
+            return alert("Faltan datos obligatorios (Nombres o Grado).")
         }
         setLoading(true)
         try {
             const res = await fetch("/api/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                // AHORA LE PASAMOS EL TIPO DE COLEGIO QUE LA CAJERA TIENE SELECCIONADO ARRIBA
                 body: JSON.stringify({ ...nuevoLibre, role: "LIBRE", tipoColegio: tipoColegioActivo }),
             })
             const data = await res.json()
@@ -159,16 +162,16 @@ export default function CajaPOS({
             const nuevoUser: Cliente = {
                 id: data.user.id,
                 name: `${nuevoLibre.nombres} ${nuevoLibre.apellidos}`.toUpperCase(),
-                dni: nuevoLibre.dni,
+                dni: data.user.dni,
                 institucion: nuevoLibre.institucion,
-                tipoColegio: tipoColegioActivo, // SE GUARDA EN EL ESTADO CON EL TIPO CORRECTO
+                tipoColegio: tipoColegioActivo,
                 role: "LIBRE"
             }
             setClientes([...clientes, nuevoUser])
             setClienteSeleccionadoId(data.user.id)
 
             agregarAlCarrito(nuevoLibre.nivel, nuevoLibre.gradoOEdad, {
-                dni: nuevoLibre.dni,
+                dni: data.user.dni,
                 nombres: nuevoLibre.nombres,
                 apellidos: nuevoLibre.apellidos
             })
@@ -182,6 +185,30 @@ export default function CajaPOS({
         }
     }
 
+    const [errorDniLibre, setErrorDniLibre] = useState(false)
+
+    const verificarDniCaja = async (dni: string) => {
+        if (!dni || dni.length < 8) {
+            setErrorDniLibre(false); return;
+        }
+        try {
+            const res = await fetch('/api/estudiantes/verificar-dnis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dnis: [dni] })
+            })
+            const data = await res.json()
+            setErrorDniLibre(data.registrados && data.registrados.includes(dni))
+        } catch (error) {
+            console.error(error)
+        }
+    }
+
+    // --- CÁLCULOS DE SUBTOTAL Y TOTAL CON DESCUENTO ---
+    const subtotal = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
+    // Evitamos que el total sea negativo si el cajero pone un descuento mayor al subtotal
+    const total = Math.max(0, subtotal - (descuentoManual || 0))
+
     const procesarVenta = async () => {
         if (!clienteSeleccionadoId || carrito.length === 0) return alert("Venta vacía")
         setLoading(true)
@@ -194,7 +221,9 @@ export default function CajaPOS({
                     clienteId: clienteSeleccionadoId,
                     items: carrito,
                     metodoPago,
-                    montoTotal: total,
+                    montoTotal: total,           // Lo que realmente paga el cliente
+                    descuento: descuentoManual,  // ENVIAMOS EL DESCUENTO A LA API
+                    subtotal: subtotal,          // Enviamos el subtotal por si lo necesitas
                     numeroOperacion,
                     fechaPago,
                     horaPago
@@ -205,6 +234,7 @@ export default function CajaPOS({
 
             setTicketVendido(data.ticket)
             setCarrito([])
+            setDescuentoManual(0) // Limpiamos el descuento después de vender
         } catch (error: any) {
             alert(`Error al cobrar: ${error.message}`)
         } finally {
@@ -212,7 +242,6 @@ export default function CajaPOS({
         }
     }
 
-    const total = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
 
     if (ticketVendido) {
         return (
@@ -237,6 +266,10 @@ export default function CajaPOS({
                                 <span className="text-sm font-black text-gray-800">{ticketVendido.numeroOperacion || "No registrado"}</span>
                             </div>
                         )}
+                        <div className="flex justify-between border-b pb-1 border-gray-200">
+                            <span className="text-sm font-bold text-gray-500">Total Pagado:</span>
+                            <span className="text-sm font-black text-green-600">S/ {Number(ticketVendido.montoTotal).toFixed(2)}</span>
+                        </div>
                         <div className="flex justify-between">
                             <span className="text-sm font-bold text-gray-500">Fecha y Hora:</span>
                             <span className="text-sm font-black text-gray-800">
@@ -281,7 +314,19 @@ export default function CajaPOS({
                     {mostrarRegistroRapido ? (
                         <div className="space-y-4 bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <input placeholder="DNI" className="p-3 border rounded-xl font-bold" value={nuevoLibre.dni} onChange={(e) => setNuevoLibre({ ...nuevoLibre, dni: e.target.value })} />
+                                <div>
+                                    <input
+                                        placeholder="DNI"
+                                        className={`w-full p-3 border rounded-xl font-bold ${errorDniLibre ? 'border-red-500 bg-red-50 text-red-600' : ''}`}
+                                        value={nuevoLibre.dni}
+                                        onChange={(e) => {
+                                            setNuevoLibre({ ...nuevoLibre, dni: e.target.value })
+                                            setErrorDniLibre(false)
+                                        }}
+                                        onBlur={(e) => verificarDniCaja(e.target.value)}
+                                    />
+                                    {errorDniLibre && <span className="text-[10px] text-red-500 font-bold ml-1">¡DNI ya registrado!</span>}
+                                </div>
                                 <input placeholder="NOMBRES" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.nombres} onChange={(e) => setNuevoLibre({ ...nuevoLibre, nombres: e.target.value })} />
                                 <input placeholder="APELLIDOS" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.apellidos} onChange={(e) => setNuevoLibre({ ...nuevoLibre, apellidos: e.target.value })} />
                             </div>
@@ -311,7 +356,13 @@ export default function CajaPOS({
                                     )}
                                 </select>
                             </div>
-                            <button onClick={registrarYSeleccionar} className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-sm shadow-lg">Registrar y Auto-Agregar al Carrito</button>
+                            <button
+                                onClick={registrarYSeleccionar}
+                                disabled={errorDniLibre || !nuevoLibre.nombres || !nuevoLibre.gradoOEdad}
+                                className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-sm shadow-lg disabled:bg-gray-400 disabled:shadow-none"
+                            >
+                                Registrar y Auto-Agregar al Carrito
+                            </button>
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -420,13 +471,14 @@ export default function CajaPOS({
                     {carrito.length === 0 && <div className="text-center text-gray-400 text-xs py-10 font-bold">CARRITO VACÍO</div>}
                 </div>
 
-                {/* ZONA DE COBRO */}
+                {/* ZONA DE COBRO CON DESCUENTO */}
                 <div className="p-8 bg-gray-900 text-white space-y-4">
                     <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full p-3 bg-gray-500 border border-gray-700 rounded-xl text-xs font-bold">
                         <option value="EFECTIVO">💵 EFECTIVO</option>
                         <option value="YAPE">📱 YAPE / PLIN</option>
                         <option value="TRANSFERENCIA">🏦 TRANSFERENCIA</option>
                     </select>
+
                     {metodoPago !== "EFECTIVO" && (
                         <div className="space-y-2">
                             <input placeholder="N° Operación" className="w-full p-2 bg-gray-500 border border-gray-700 rounded-xl text-[10px] font-bold" value={numeroOperacion} onChange={(e) => setNumeroOperacion(e.target.value)} />
@@ -436,10 +488,42 @@ export default function CajaPOS({
                             </div>
                         </div>
                     )}
-                    <div className="flex justify-between items-center border-t border-gray-800 pt-4">
-                        <span className="font-black text-sm uppercase">Total</span>
-                        <span className="font-black text-2xl text-blue-400">S/ {total.toFixed(2)}</span>
+
+                    {/* INPUT DE DESCUENTO */}
+                    <div className="flex justify-between items-center bg-gray-800 p-3 rounded-xl border border-gray-700">
+                        <div className="flex items-center text-gray-400">
+                            <Tag className="w-4 h-4 mr-2" />
+                            <span className="text-xs font-bold uppercase">Descuento (S/)</span>
+                        </div>
+                        <input
+                            type="number"
+                            min="0"
+                            step="0.50"
+                            value={descuentoManual === 0 ? "" : descuentoManual} // Para que no estorbe el 0 inicial si borran
+                            placeholder="0.00"
+                            onChange={(e) => setDescuentoManual(Number(e.target.value))}
+                            className="w-24 p-2 bg-gray-700 border border-gray-600 rounded-lg text-right text-sm font-bold text-white focus:outline-none focus:border-blue-500"
+                        />
                     </div>
+
+                    {/* RESUMEN FINAL DE PRECIOS */}
+                    <div className="space-y-1 text-sm border-t border-gray-800 pt-4">
+                        <div className="flex justify-between text-gray-400">
+                            <span>Subtotal</span>
+                            <span>S/ {subtotal.toFixed(2)}</span>
+                        </div>
+                        {descuentoManual > 0 && (
+                            <div className="flex justify-between text-green-400">
+                                <span>Descuento</span>
+                                <span>- S/ {descuentoManual.toFixed(2)}</span>
+                            </div>
+                        )}
+                        <div className="flex justify-between items-center pt-2">
+                            <span className="font-black text-sm uppercase">Total</span>
+                            <span className="font-black text-2xl text-blue-400">S/ {total.toFixed(2)}</span>
+                        </div>
+                    </div>
+
                     <button onClick={procesarVenta} disabled={carrito.length === 0 || !clienteSeleccionadoId || loading} className="w-full bg-blue-600 py-4 rounded-2xl font-black uppercase text-sm shadow-xl shadow-blue-900/50 hover:bg-blue-500 disabled:bg-gray-600 disabled:shadow-none transition-all">Cobrar</button>
                 </div>
             </div>
