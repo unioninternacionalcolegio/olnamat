@@ -35,7 +35,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         { name: "Validar Pagos", href: "/admin/ver-pagos", icon: Eye, roles: ["ADMINISTRADOR", "ASISTENTE"] },
         { name: "Caja / Ventas", href: "/admin/caja", icon: CreditCard, roles: ["ADMINISTRADOR", "ASISTENTE"] },
         { name: "Subir Notas", href: "/admin/notas", icon: ClipboardList, roles: ["ADMINISTRADOR", "REVISADOR"] },
-        { name: "Resultados Oficiales", href: "/admin/resultados", icon: Trophy, roles: ["ADMINISTRADOR", "ASISTENTE", "REVISADOR"] },
+        { name: "Resultados Oficiales", href: "/admin/resultados", icon: Trophy, roles: ["ADMINISTRADOR", "REVISADOR"] },
         { name: "Configuración", href: "/admin/configuracion", icon: Settings, roles: ["ADMINISTRADOR"] },
 
         // --- RUTAS DE DELEGADOS Y REPRESENTANTES ---

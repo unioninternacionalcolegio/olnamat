@@ -1,3 +1,4 @@
+//app/(dashboard)/admin/imprimir-fichas/VistaImpresionFichas.tsx
 "use client"
 
 import { Printer, ArrowLeft } from "lucide-react"
@@ -130,8 +131,7 @@ export default function VistaImpresionFichas({
                                             {Array.from({ length: 10 }).map((_, num) => (
                                                 <div
                                                     key={num}
-                                                    className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black
-                                ${num % 2 === 0 ? 'bg-white' : 'bg-gray-200'}`}
+                                                    className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black bg-white`}
                                                 >
                                                     {num}
                                                 </div>
@@ -163,8 +163,7 @@ export default function VistaImpresionFichas({
                                                 {(c === 0 ? [0, 1, 2] : Array.from({ length: 10 })).map((_, num) => (
                                                     <div
                                                         key={num}
-                                                        className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black
-                                    ${num % 2 === 0 ? 'bg-white' : 'bg-gray-200'}`}
+                                                        className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black bg-white`}
                                                     >
                                                         {num}
                                                     </div>
@@ -183,8 +182,7 @@ export default function VistaImpresionFichas({
                                                 {(c === 0 ? [0, 1, 2, 3, 4, 5] : Array.from({ length: 10 })).map((_, num) => (
                                                     <div
                                                         key={num}
-                                                        className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black
-                                    ${num % 2 === 0 ? 'bg-white' : 'bg-gray-200'}`}
+                                                        className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black bg-white`}
                                                     >
                                                         {num}
                                                     </div>
@@ -203,8 +201,7 @@ export default function VistaImpresionFichas({
                                                 {(c === 0 ? [0, 1, 2, 3, 4, 5] : Array.from({ length: 10 })).map((_, num) => (
                                                     <div
                                                         key={num}
-                                                        className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black
-                                    ${num % 2 === 0 ? 'bg-white' : 'bg-gray-200'}`}
+                                                        className={`w-5 h-5 mx-auto rounded-full border-[1.5px] border-black flex items-center justify-center text-[9px] font-black bg-white`}
                                                     >
                                                         {num}
                                                     </div>
@@ -259,12 +256,11 @@ export default function VistaImpresionFichas({
                                     <div className="absolute -bottom-2.5 -left-2.5 w-3.5 h-3.5 bg-black"></div>
                                     <div className="absolute -bottom-2.5 -right-2.5 w-3.5 h-3.5 bg-black"></div>
 
-                                    <div className="flex flex-col">
+                                    <div className="flex flex-col gap-1"> {/* Separación limpia sin líneas */}
                                         {columna.map((i) => (
                                             <div
                                                 key={i}
-                                                className={`flex items-center py-[2px] px-3 border-b border-gray-300 last:border-0
-                            ${i % 2 !== 0 ? 'bg-gray-200' : 'bg-white'}`}
+                                                className={`flex items-center py-[2px] px-3 bg-white`}
                                             >
                                                 <span className="font-black text-[13px] w-6 text-right mr-2 shrink-0">
                                                     {i + 1}.
@@ -274,7 +270,8 @@ export default function VistaImpresionFichas({
                                                     {['A', 'B', 'C', 'D', 'E'].map(letra => (
                                                         <div
                                                             key={letra}
-                                                            className="w-6 h-6 rounded-full border-[1.7px] border-black flex items-center justify-center font-black text-[10px] bg-white"
+                                                            // CIRUGÍA: Borde 2px para máxima detección y texto gris claro (dropout color)
+                                                            className="w-6 h-6 rounded-full border-[2px] border-black flex items-center justify-center font-bold text-[10px] text-gray-300 bg-white"
                                                         >
                                                             {letra}
                                                         </div>
@@ -289,7 +286,7 @@ export default function VistaImpresionFichas({
 
                         {/* FOOTER */}
                         <div className="mt-auto text-center border-t-2 border-black pt-1">
-                            <p className="text-[8px] font-bold text-gray-500 tracking-tighter">SISTEMA OMR V14 - UNION INTERNACIONAL SAC</p>
+                            <p className="text-[8px] font-bold text-gray-500 tracking-tighter">SISTEMA OMR V20 - UNION INTERNACIONAL SAC</p>
                         </div>
 
                     </div>

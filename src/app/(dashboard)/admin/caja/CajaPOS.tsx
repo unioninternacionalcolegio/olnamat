@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Printer, Trash2, Tag } from "lucide-react"
+import { Printer, Trash2, Tag, Search, Building2 } from "lucide-react"
 
 type Cliente = {
     id: string,
@@ -62,11 +62,34 @@ export default function CajaPOS({
         nivel: "PRIMARIA", gradoOEdad: ""
     })
 
+    // --- FILTRADOS Y CÁLCULOS INTELIGENTES ---
     const gradosDisponibles = useMemo(() => {
         return configuraciones
             .filter(c => c.nivel === nuevoLibre.nivel)
             .map(c => c.gradoOEdad)
     }, [configuraciones, nuevoLibre.nivel])
+
+    // Solo Delegados para el buscador principal
+    const delegados = useMemo(() => clientes.filter(c => c.role === 'DELEGADO'), [clientes])
+
+    // Autocompletado de colegios únicos
+    const colegiosUnicos = useMemo(() => {
+        const set = new Set<string>()
+        clientes.forEach(c => {
+            if (c.institucion && c.institucion.trim() !== "" && c.institucion.toUpperCase() !== "ALUMNO LIBRE") {
+                set.add(c.institucion.toUpperCase())
+            }
+        })
+        return Array.from(set).sort()
+    }, [clientes])
+
+    // Estado del buscador de delegados
+    const [busquedaDelegado, setBusquedaDelegado] = useState("")
+    const [mostrarOpcionesDelegado, setMostrarOpcionesDelegado] = useState(false)
+    const delegadosFiltrados = delegados.filter(d =>
+        d.name?.toLowerCase().includes(busquedaDelegado.toLowerCase()) ||
+        d.dni?.includes(busquedaDelegado)
+    )
 
     useEffect(() => {
         if (gradosDisponibles.length > 0 && !gradosDisponibles.includes(nuevoLibre.gradoOEdad)) {
@@ -105,7 +128,7 @@ export default function CajaPOS({
         grado: string,
         datosEstudiante?: { dni: string, nombres: string, apellidos: string }
     ) => {
-        if (!clienteActual && !datosEstudiante) return alert("Selecciona un cliente primero.")
+        if (!clienteActual && !datosEstudiante) return alert("Selecciona un delegado/cliente primero.")
 
         const { monto, fase } = calcularPrecio(nivel, grado, tipoColegioActivo)
         const idItem = `${nivel}-${grado}-${tipoColegioActivo}-${fase}`
@@ -115,7 +138,7 @@ export default function CajaPOS({
             setCarrito(carrito.map(item => item.id === idItem ? { ...item, cantidad: item.cantidad + 1 } : item))
         } else {
             setCarrito([...carrito, {
-                id: datosEstudiante ? `${idItem}-libre-${Date.now()}` : idItem,
+                id: datosEstudiante ? `${idItem}-indep-${Date.now()}` : idItem,
                 nivel,
                 gradoOEdad: grado,
                 cantidad: 1,
@@ -149,12 +172,39 @@ export default function CajaPOS({
         if (!nuevoLibre.nombres || !nuevoLibre.gradoOEdad) {
             return alert("Faltan datos obligatorios (Nombres o Grado).")
         }
+
+        let dniFinal = nuevoLibre.dni.trim()
+
+        // 1. GENERACIÓN AUTOMÁTICA DE DNI L000X
+        if (!dniFinal) {
+            const currentL = clientes
+                .filter(c => c.dni?.startsWith('L'))
+                .map(c => parseInt(c.dni!.replace('L', '')))
+                .filter(n => !isNaN(n));
+            const nextNum = currentL.length > 0 ? Math.max(...currentL) + 1 : 1;
+            dniFinal = "L" + nextNum.toString().padStart(4, '0');
+        }
+
+        // 2. INSTITUCIÓN POR DEFECTO PARA LIBRES
+        let instFinal = tipoColegioActivo === 'LIBRE'
+            ? "ALUMNO LIBRE"
+            : (nuevoLibre.institucion || "ALUMNO LIBRE").toUpperCase()
+
         setLoading(true)
         try {
             const res = await fetch("/api/register", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ ...nuevoLibre, role: "LIBRE", tipoColegio: tipoColegioActivo }),
+                body: JSON.stringify({
+                    dni: dniFinal,
+                    nombres: nuevoLibre.nombres,
+                    apellidos: nuevoLibre.apellidos,
+                    institucion: instFinal,
+                    nivel: nuevoLibre.nivel,
+                    gradoOEdad: nuevoLibre.gradoOEdad,
+                    role: "LIBRE", // A nivel de sistema es LIBRE (usuario sin privilegios)
+                    tipoColegio: tipoColegioActivo
+                }),
             })
             const data = await res.json()
             if (!res.ok) throw new Error(data.error)
@@ -163,12 +213,14 @@ export default function CajaPOS({
                 id: data.user.id,
                 name: `${nuevoLibre.nombres} ${nuevoLibre.apellidos}`.toUpperCase(),
                 dni: data.user.dni,
-                institucion: nuevoLibre.institucion,
+                institucion: instFinal,
                 tipoColegio: tipoColegioActivo,
                 role: "LIBRE"
             }
+
             setClientes([...clientes, nuevoUser])
             setClienteSeleccionadoId(data.user.id)
+            setBusquedaDelegado(`${nuevoUser.name} (${nuevoUser.dni})`) // Visualmente seleccionado
 
             agregarAlCarrito(nuevoLibre.nivel, nuevoLibre.gradoOEdad, {
                 dni: data.user.dni,
@@ -177,7 +229,7 @@ export default function CajaPOS({
             })
 
             setMostrarRegistroRapido(false)
-            setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "" })
+            setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "", institucion: "" })
         } catch (error: any) {
             alert(error.message)
         } finally {
@@ -206,7 +258,6 @@ export default function CajaPOS({
 
     // --- CÁLCULOS DE SUBTOTAL Y TOTAL CON DESCUENTO ---
     const subtotal = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
-    // Evitamos que el total sea negativo si el cajero pone un descuento mayor al subtotal
     const total = Math.max(0, subtotal - (descuentoManual || 0))
 
     const procesarVenta = async () => {
@@ -221,9 +272,9 @@ export default function CajaPOS({
                     clienteId: clienteSeleccionadoId,
                     items: carrito,
                     metodoPago,
-                    montoTotal: total,           // Lo que realmente paga el cliente
-                    descuento: descuentoManual,  // ENVIAMOS EL DESCUENTO A LA API
-                    subtotal: subtotal,          // Enviamos el subtotal por si lo necesitas
+                    montoTotal: total,
+                    descuento: descuentoManual,
+                    subtotal: subtotal,
                     numeroOperacion,
                     fechaPago,
                     horaPago
@@ -234,14 +285,14 @@ export default function CajaPOS({
 
             setTicketVendido(data.ticket)
             setCarrito([])
-            setDescuentoManual(0) // Limpiamos el descuento después de vender
+            setDescuentoManual(0)
+            setBusquedaDelegado("")
         } catch (error: any) {
             alert(`Error al cobrar: ${error.message}`)
         } finally {
             setLoading(false)
         }
     }
-
 
     if (ticketVendido) {
         return (
@@ -296,27 +347,68 @@ export default function CajaPOS({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
 
+                {/* CONTROLES MAESTROS GLOBALES (Se movieron arriba para que apliquen al Registro Rápido) */}
+                <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 text-center">Fase de Venta</label>
+                            <div className="flex gap-2">
+                                {["REGULAR", "EXTEMPORANEO"].map(fase => (
+                                    <button
+                                        key={fase}
+                                        onClick={() => setFaseVentaActiva(fase as any)}
+                                        className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${faseVentaActiva === fase ? (fase === "REGULAR" ? "bg-green-600 text-white" : "bg-red-600 text-white") : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+                                    >
+                                        {fase}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200">
+                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 text-center">Tipo de Colegio</label>
+                            <div className="flex gap-2">
+                                {["ESTATAL", "PARTICULAR", "LIBRE"].map(tipo => (
+                                    <button
+                                        key={tipo}
+                                        onClick={() => setTipoColegioActivo(tipo)}
+                                        className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${tipoColegioActivo === tipo ? "bg-blue-600 text-white shadow-md" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
+                                    >
+                                        {tipo}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* PANEL CLIENTE */}
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
                     <div className="flex justify-between items-center mb-6">
-                        <label className="font-black text-gray-800 uppercase text-sm">Cliente (Quien Paga)</label>
+                        <label className="font-black text-gray-800 uppercase text-sm">Cliente (Delegado o Alumno)</label>
                         <button
                             onClick={() => {
                                 setMostrarRegistroRapido(!mostrarRegistroRapido)
-                                if (mostrarRegistroRapido) setClienteSeleccionadoId("")
+                                if (!mostrarRegistroRapido) {
+                                    setClienteSeleccionadoId("")
+                                    setBusquedaDelegado("")
+                                }
                             }}
                             className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-2 rounded-lg"
                         >
-                            {mostrarRegistroRapido ? "CANCELAR" : "+ REGISTRO LIBRE RÁPIDO"}
+                            {mostrarRegistroRapido ? "CANCELAR" : "+ REGISTRO RÁPIDO (ALUMNO)"}
                         </button>
                     </div>
 
                     {mostrarRegistroRapido ? (
                         <div className="space-y-4 bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
+                            <p className="text-xs text-gray-500 font-bold mb-2">
+                                Si dejas el DNI vacío, se generará uno automático (Ej. L0001).
+                            </p>
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <input
-                                        placeholder="DNI"
+                                        placeholder="DNI (Opcional)"
                                         className={`w-full p-3 border rounded-xl font-bold ${errorDniLibre ? 'border-red-500 bg-red-50 text-red-600' : ''}`}
                                         value={nuevoLibre.dni}
                                         onChange={(e) => {
@@ -330,8 +422,25 @@ export default function CajaPOS({
                                 <input placeholder="NOMBRES" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.nombres} onChange={(e) => setNuevoLibre({ ...nuevoLibre, nombres: e.target.value })} />
                                 <input placeholder="APELLIDOS" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.apellidos} onChange={(e) => setNuevoLibre({ ...nuevoLibre, apellidos: e.target.value })} />
                             </div>
+
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <input placeholder="COLEGIO" className="p-3 border rounded-xl font-bold uppercase col-span-1" value={nuevoLibre.institucion} onChange={(e) => setNuevoLibre({ ...nuevoLibre, institucion: e.target.value })} />
+                                <div className="col-span-1 relative">
+                                    <div className="absolute top-0 left-0 text-[8px] font-bold text-blue-500 bg-blue-50 px-1 rounded-br-lg">
+                                        COLEGIO
+                                    </div>
+                                    <input
+                                        placeholder="Escribe o selecciona colegio..."
+                                        className="w-full p-3 pt-4 border rounded-xl font-bold uppercase disabled:bg-gray-200 disabled:text-gray-400"
+                                        value={tipoColegioActivo === "LIBRE" ? "ALUMNO LIBRE" : nuevoLibre.institucion}
+                                        onChange={(e) => setNuevoLibre({ ...nuevoLibre, institucion: e.target.value })}
+                                        list="colegios-list"
+                                        disabled={tipoColegioActivo === "LIBRE"}
+                                    />
+                                    <datalist id="colegios-list">
+                                        {colegiosUnicos.map(col => <option key={col} value={col} />)}
+                                    </datalist>
+                                </div>
+
                                 <select
                                     className="p-3 border rounded-xl font-bold bg-white"
                                     value={nuevoLibre.nivel}
@@ -352,7 +461,7 @@ export default function CajaPOS({
                                             <option key={grado} value={grado}>{grado}</option>
                                         ))
                                     ) : (
-                                        <option value="">Sin grados configurados</option>
+                                        <option value="">Sin grados</option>
                                     )}
                                 </select>
                             </div>
@@ -365,59 +474,59 @@ export default function CajaPOS({
                             </button>
                         </div>
                     ) : (
-                        <div className="space-y-2">
-                            <select value={clienteSeleccionadoId} onChange={(e) => setClienteSeleccionadoId(e.target.value)} className="w-full p-4 border-2 border-gray-100 rounded-2xl font-bold bg-gray-50">
-                                <option value="">-- BUSCAR DELEGADO / CLIENTE --</option>
-                                {clientes.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name} ({c.dni})</option>
-                                ))}
-                            </select>
+                        <div className="space-y-2 relative">
+                            <div className="relative">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar DELEGADO por nombre o DNI..."
+                                    className="w-full p-4 pl-12 border-2 border-gray-100 rounded-2xl font-bold bg-gray-50 focus:border-blue-500 focus:outline-none"
+                                    value={busquedaDelegado}
+                                    onChange={e => {
+                                        setBusquedaDelegado(e.target.value);
+                                        setMostrarOpcionesDelegado(true);
+                                        if (e.target.value === "") setClienteSeleccionadoId("");
+                                    }}
+                                    onFocus={() => setMostrarOpcionesDelegado(true)}
+                                    onBlur={() => setTimeout(() => setMostrarOpcionesDelegado(false), 200)}
+                                />
+                            </div>
+                            {mostrarOpcionesDelegado && busquedaDelegado && (
+                                <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-auto">
+                                    {delegadosFiltrados.map(d => (
+                                        <div
+                                            key={d.id}
+                                            className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
+                                            onClick={() => {
+                                                setClienteSeleccionadoId(d.id);
+                                                setBusquedaDelegado(`${d.name} (${d.dni})`);
+                                                setMostrarOpcionesDelegado(false);
+                                            }}
+                                        >
+                                            <p className="font-bold text-sm text-gray-800">{d.name}</p>
+                                            <p className="text-[10px] font-bold text-gray-500 flex items-center mt-1">
+                                                <span className="text-blue-500 mr-2">{d.dni}</span>
+                                                <Building2 className="w-3 h-3 mr-1" /> {d.institucion || "Sin colegio"}
+                                            </p>
+                                        </div>
+                                    ))}
+                                    {delegadosFiltrados.length === 0 && (
+                                        <div className="p-4 text-sm text-center text-gray-500 font-bold">No se encontraron delegados</div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
-                {/* BOTONES DE CUPOS Y CONFIGURACIÓN DE PRECIOS */}
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6 transition-all">
-
-                    {/* SIEMPRE VISIBLE: CONTROLES MAESTROS PARA LA VENTA (FASE Y TIPO DE COLEGIO) */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 text-center">Fase de Venta</label>
-                            <div className="flex gap-2">
-                                {["REGULAR", "EXTEMPORANEO"].map(fase => (
-                                    <button
-                                        key={fase}
-                                        onClick={() => setFaseVentaActiva(fase as any)}
-                                        className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${faseVentaActiva === fase ? (fase === "REGULAR" ? "bg-green-600 text-white" : "bg-red-600 text-white") : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
-                                    >
-                                        {fase}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200">
-                            <label className="block text-[10px] font-black text-gray-500 uppercase mb-2 text-center">Tipo de Colegio del Cupo</label>
-                            <div className="flex gap-2">
-                                {["ESTATAL", "PARTICULAR", "LIBRE"].map(tipo => (
-                                    <button
-                                        key={tipo}
-                                        onClick={() => setTipoColegioActivo(tipo)}
-                                        className={`flex-1 py-2 text-[10px] font-black rounded-xl transition-all ${tipoColegioActivo === tipo ? "bg-blue-600 text-white shadow-md" : "bg-gray-200 text-gray-500 hover:bg-gray-300"}`}
-                                    >
-                                        {tipo}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* SE OCULTA SI ESTÁ EL REGISTRO RÁPIDO ABIERTO */}
-                    {!mostrarRegistroRapido && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-gray-100">
+                {/* BOTONES DE CUPOS (Se oculta si está en registro rápido para evitar cruces) */}
+                {!mostrarRegistroRapido && (
+                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6">
+                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b pb-2">Agregar Cupos Rápidos</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             {["INICIAL", "PRIMARIA", "SECUNDARIA"].map((nivel) => (
                                 <div key={nivel} className="space-y-2">
-                                    <h4 className="text-[10px] font-black text-gray-500 uppercase">{nivel}</h4>
+                                    <h4 className="text-[10px] font-black text-blue-500 uppercase">{nivel}</h4>
                                     <div className="flex flex-col gap-1">
                                         {configuraciones.filter(c => c.nivel === nivel).map((c) => (
                                             <button key={c.id} onClick={() => agregarAlCarrito(nivel, c.gradoOEdad)} className="text-left px-4 py-2 bg-gray-50 hover:bg-blue-600 hover:text-white rounded-xl text-[11px] font-bold transition-all border border-transparent hover:border-blue-600 flex justify-between">
@@ -428,11 +537,12 @@ export default function CajaPOS({
                                 </div>
                             ))}
                         </div>
-                    )}
-                </div>
+                    </div>
+                )}
+
             </div>
 
-            {/* CARRITO */}
+            {/* CARRITO (Igual) */}
             <div className="bg-white flex flex-col h-[750px] rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden sticky top-6">
                 <div className="p-6 bg-gray-500 text-white flex justify-between items-center font-black text-sm uppercase">Carrito Detalle</div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -499,7 +609,7 @@ export default function CajaPOS({
                             type="number"
                             min="0"
                             step="0.50"
-                            value={descuentoManual === 0 ? "" : descuentoManual} // Para que no estorbe el 0 inicial si borran
+                            value={descuentoManual === 0 ? "" : descuentoManual}
                             placeholder="0.00"
                             onChange={(e) => setDescuentoManual(Number(e.target.value))}
                             className="w-24 p-2 bg-gray-700 border border-gray-600 rounded-lg text-right text-sm font-bold text-white focus:outline-none focus:border-blue-500"

@@ -1,3 +1,5 @@
+//app\(dashboard)\admin\alumnos\page.tsx
+// app/(dashboard)/admin/alumnos/page.tsx
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import prisma from "@/lib/prisma"
@@ -7,7 +9,7 @@ export default async function AlumnosPage() {
     const session = await getServerSession(authOptions)
 
     // Obtenemos los alumnos del usuario logueado
-    // Si es ADMIN, ve todos. Si es DELEGADO/LIBRE, solo los suyos.
+    // Si es ADMIN o ASISTENTE, ve todos. Si es DELEGADO/LIBRE/REPRESENTANTE_IE, solo los suyos.
     const query: any = {}
     if (session?.user.role !== 'ADMINISTRADOR' && session?.user.role !== 'ASISTENTE') {
         query.creadorId = session?.user.id
@@ -16,7 +18,16 @@ export default async function AlumnosPage() {
     const estudiantes = await prisma.estudiante.findMany({
         where: query,
         include: {
-            pago: true
+            pago: true,
+            // AÑADIDO: Incluimos al creador para obtener su rol y alimentar 
+            // los filtros (Libre, Delegado, Colegio) en el componente cliente.
+            creador: {
+                select: {
+                    id: true,
+                    name: true,
+                    role: true
+                }
+            }
         },
         orderBy: { createdAt: 'desc' }
     })

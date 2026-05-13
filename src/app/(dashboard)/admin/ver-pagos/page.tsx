@@ -1,3 +1,4 @@
+// app/(dashboard)/admin/ver-pagos/page.tsx
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
@@ -7,7 +8,6 @@ import ListaPagos from "./ListaPagos"
 export default async function VerPagosPage() {
     const session = await getServerSession(authOptions)
 
-    // Seguridad: Solo Admin o Asistente
     if (!session || !["ADMINISTRADOR", "ASISTENTE"].includes(session.user.role)) {
         redirect("/delegado")
     }
@@ -15,9 +15,6 @@ export default async function VerPagosPage() {
     const esAdmin = session.user.role === "ADMINISTRADOR"
     const miUserId = session.user.id
 
-    // Lógica Inteligente de Filtro en Base de Datos:
-    // Si es ADMIN: Ve TODOS los pagos.
-    // Si es ASISTENTE: Ve los PENDIENTES de todos, y SOLO sus APROBADOS/RECHAZADOS.
     const filtroQuery: any = esAdmin
         ? {}
         : {
@@ -27,18 +24,21 @@ export default async function VerPagosPage() {
             ]
         }
 
-    // Traemos los pagos
     const pagos = await prisma.pago.findMany({
         where: filtroQuery,
         include: {
             cliente: true,
             cajero: true,
+            // AÑADIDO: Traemos los estudiantes para el reporte Excel
+            estudiantes: {
+                select: { dni: true, nombres: true, apellidos: true }
+            },
             _count: {
                 select: { estudiantes: true }
             }
         },
         orderBy: [
-            { estado: 'desc' }, // PENDIENTES primero
+            { estado: 'desc' },
             { createdAt: 'desc' }
         ]
     })
@@ -46,12 +46,10 @@ export default async function VerPagosPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Validación de Vouchers</h1>
-                <p className="text-gray-600">Verifica depósitos y libera comprobantes.</p>
+                <h1 className="text-2xl font-bold text-gray-900">Validación y Caja</h1>
+                <p className="text-gray-600">Verifica depósitos, libera comprobantes y genera reportes.</p>
             </div>
 
-            {/* ¡AQUÍ ESTABA EL ERROR DE TYPESCRIPT! */}
-            {/* Ahora sí le pasamos las variables currentUserId y role que exige ListaPagos.tsx */}
             <ListaPagos
                 iniciales={pagos}
                 currentUserId={miUserId}

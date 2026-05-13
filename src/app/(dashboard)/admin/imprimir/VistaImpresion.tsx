@@ -1,4 +1,4 @@
-//app\(dashboard)\admin\imprimir\VistaImpresion.tsx
+//app/(dashboard)/admin/imprimir/VistaImpresion.tsx
 "use client"
 
 import { useState } from "react"
@@ -8,8 +8,8 @@ import { useRouter } from "next/navigation"
 
 export default function VistaImpresion({ estudiantes }: { estudiantes: any[] }) {
     const router = useRouter()
-    // Estado para controlar si imprimimos 1x hoja o 4x hoja
-    const [formato, setFormato] = useState<'1' | '4'>('4')
+    // Estado cambiado para controlar si imprimimos 1x hoja o 8x hoja
+    const [formato, setFormato] = useState<'1' | '8'>('8')
 
     const handlePrint = () => {
         window.print()
@@ -39,10 +39,10 @@ export default function VistaImpresion({ estudiantes }: { estudiantes: any[] }) 
                             <Square className="w-4 h-4 mr-2" /> 1 por hoja
                         </button>
                         <button
-                            onClick={() => setFormato('4')}
-                            className={`flex items-center px-3 py-1.5 rounded-md text-sm font-bold transition-colors ${formato === '4' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
+                            onClick={() => setFormato('8')}
+                            className={`flex items-center px-3 py-1.5 rounded-md text-sm font-bold transition-colors ${formato === '8' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-800'}`}
                         >
-                            <LayoutGrid className="w-4 h-4 mr-2" /> 4 por hoja
+                            <LayoutGrid className="w-4 h-4 mr-2" /> 8 por hoja
                         </button>
                     </div>
 
@@ -59,16 +59,17 @@ export default function VistaImpresion({ estudiantes }: { estudiantes: any[] }) 
             {/* ÁREA DE IMPRESIÓN */}
             <div id="print-area" className={`
                 justify-items-center
-                ${formato === '4'
-                    ? 'grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 print:gap-4'
+                ${formato === '8'
+                    /* Se mantiene grid de 2 columnas, pero se reduce un poco el gap de impresión (print:gap-2) para que entren las 4 filas de carnets en el A4 */
+                    ? 'grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-8 print:gap-2'
                     : 'flex flex-col items-center gap-8'
                 }
             `}>
                 {estudiantes.map((est, index) => {
                     // Lógica para forzar salto de página:
                     // Si es formato 1: Salta después de CADA carnet.
-                    // Si es formato 4: Salta cada 4 carnets (índices 3, 7, 11...).
-                    const saltoDePagina = formato === '1' || (formato === '4' && (index + 1) % 4 === 0)
+                    // Si es formato 8: Salta cada 8 carnets (índices 7, 15, 23...).
+                    const saltoDePagina = formato === '1' || (formato === '8' && (index + 1) % 8 === 0)
 
                     return (
                         <div

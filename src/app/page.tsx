@@ -364,12 +364,11 @@ export default function Home() {
           <div>
             <h3 className="text-center text-2xl font-bold mb-10 text-gray-800">Colegios Participantes 2025</h3>
             <div className="flex flex-wrap justify-center gap-8 md:gap-12 opacity-75 grayscale hover:grayscale-0 transition-all">
-              <img src="/colegios/san-jose.png" alt="Colegio San José" className="h-16" />
-              <img src="/colegios/san-jose.png" alt="Colegio San José" className="h-16" />
-              <img src="/colegios/san-jose.png" alt="Colegio San José" className="h-16" />
-              <img src="/colegios/san-jose.png" alt="Colegio San José" className="h-16" />
-              {/* Agrega más logos aquí */}
-              <img src="/colegios/otro-colegio.png" alt="Otro Colegio" className="h-16" />
+              <img src="/colegios/praxis.png" alt="Praxis" className="h-16" />
+              <img src="/colegios/exelenti.png" alt="Exelenti" className="h-16" />
+              <img src="/colegios/divina.png" alt="Divina Misericordia" className="h-16" />
+              <img src="/colegios/exittus.png" alt="exittus" className="h-16" />
+              <img src="/colegios/trilenium.png" alt="Trilenium" className="h-16" />
             </div>
           </div>
         </div>
