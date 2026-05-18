@@ -1,3 +1,4 @@
+//app(dashboard)/admin/ticket/[id]/TicketClient.tsx
 "use client"
 import { useEffect, useState, useMemo } from "react"
 import Image from "next/image"
@@ -43,8 +44,11 @@ export default function TicketClient({ pago }: { pago: any }) {
         timeStyle: 'short'
     })
 
-    // Fecha en la que se hizo el yape/transferencia
-    const fechaTransferencia = pago.fechaHoraPago ? new Date(pago.fechaHoraPago).toLocaleString('es-PE', {
+    // Variable para saber si usamos el modelo nuevo (múltiples pagos) o el antiguo
+    const esPagoMultiple = pago.detalles && pago.detalles.length > 0;
+
+    // Fecha en la que se hizo el yape/transferencia (Modo Antiguo por retrocompatibilidad)
+    const fechaTransferenciaAntigua = pago.fechaHoraPago ? new Date(pago.fechaHoraPago).toLocaleString('es-PE', {
         dateStyle: 'short',
         timeStyle: 'short'
     }) : null
@@ -116,28 +120,59 @@ export default function TicketClient({ pago }: { pago: any }) {
                         </tbody>
                     </table>
 
-                    {/* Totales */}
+                    {/* Totales y Forma de Pago */}
                     <div className="border-t-2 border-black pt-2 mb-6">
-                        <div className="flex justify-between items-end">
-                            <span className="font-bold text-[11px] uppercase">Forma de Pago:</span>
-                            <span className="text-[11px] font-bold uppercase">{pago.metodo}</span>
-                        </div>
 
-                        {/* Bloque exclusivo para YAPE/TRANSFERENCIA/PLIN */}
-                        {pago.metodo !== "EFECTIVO" && (
-                            <div className="bg-gray-100 p-1 mt-1 border border-gray-300 rounded print:bg-transparent print:border-gray-500">
+                        {esPagoMultiple ? (
+                            /* =================== NUEVO MODO: MÚLTIPLES PAGOS =================== */
+                            <div className="mb-2">
+                                <span className="font-bold text-[11px] uppercase block mb-1">Desglose de Pago(s):</span>
+                                {pago.detalles.map((d: any, idx: number) => (
+                                    <div key={idx} className="bg-gray-50 border-b border-dashed border-gray-300 pb-1 mb-1 print:bg-transparent">
+                                        <div className="flex justify-between items-end">
+                                            <span className="text-[10px] uppercase font-bold text-gray-700">{d.metodo}</span>
+                                            <span className="text-[10px] font-bold">S/ {d.monto.toFixed(2)}</span>
+                                        </div>
+                                        {d.numeroOperacion && (
+                                            <div className="text-[9px] text-gray-600 uppercase mt-[2px]">
+                                                OP: {d.numeroOperacion}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            /* =================== MODO ANTIGUO: RETROCOMPATIBILIDAD =================== */
+                            <>
                                 <div className="flex justify-between items-end">
-                                    <span className="font-bold text-[9px] uppercase">N° Operación:</span>
-                                    <span className="text-[10px] font-bold">{pago.numeroOperacion || "N/A"}</span>
+                                    <span className="font-bold text-[11px] uppercase">Forma de Pago:</span>
+                                    <span className="text-[11px] font-bold uppercase">{pago.metodo}</span>
                                 </div>
-                                <div className="flex justify-between items-end mt-1">
-                                    <span className="font-bold text-[9px] uppercase">Fecha/Hora:</span>
-                                    <span className="text-[10px] font-bold">{fechaTransferencia || "N/A"}</span>
-                                </div>
+
+                                {pago.metodo !== "EFECTIVO" && (
+                                    <div className="bg-gray-100 p-1 mt-1 border border-gray-300 rounded print:bg-transparent print:border-gray-500">
+                                        <div className="flex justify-between items-end">
+                                            <span className="font-bold text-[9px] uppercase">N° Operación:</span>
+                                            <span className="text-[10px] font-bold">{pago.numeroOperacion || "N/A"}</span>
+                                        </div>
+                                        <div className="flex justify-between items-end mt-1">
+                                            <span className="font-bold text-[9px] uppercase">Fecha/Hora:</span>
+                                            <span className="text-[10px] font-bold">{fechaTransferenciaAntigua || "N/A"}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        )}
+
+                        {/* DESCUENTO Y TOTAL FINAL */}
+                        {pago.descuento > 0 && (
+                            <div className="flex justify-between items-end mt-2 text-red-600 print:text-black">
+                                <span className="font-bold text-[11px] uppercase">Descuento:</span>
+                                <span className="font-bold text-[11px]">- S/ {pago.descuento.toFixed(2)}</span>
                             </div>
                         )}
 
-                        <div className="flex justify-between items-end mt-2">
+                        <div className="flex justify-between items-end mt-2 pt-1 border-t border-black">
                             <span className="font-black text-sm uppercase">TOTAL:</span>
                             <span className="font-black text-lg">S/ {pago.montoTotal.toFixed(2)}</span>
                         </div>

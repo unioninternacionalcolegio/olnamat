@@ -1,4 +1,4 @@
-// app/api/pagos/[id]/verificar/route.ts
+//app/api/pagos/[id]/verificar/route.ts
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
@@ -15,10 +15,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const body = await req.json()
         const { estado } = body
 
-        // 1. Extraemos el ID esperando la promesa (Fix para el error de Build)
+        // 1. Extraemos el ID resolviendo la promesa en Next.js 15+
         const { id } = await params
 
-        // 2. Validación extra de seguridad
+        // 2. Validación extra de seguridad de los Enums
         if (!estado || !Object.values(EstadoPago).includes(estado)) {
             return NextResponse.json({ error: "Estado de pago no válido" }, { status: 400 })
         }
@@ -26,25 +26,28 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // Preparar la data a actualizar
         const dataToUpdate: any = { estado: estado as EstadoPago }
 
-        // NUEVO: Si se aprueba o rechaza, registramos QUIÉN lo hizo (cajeroId)
+        // Si se aprueba o rechaza, registramos QUIÉN lo hizo
         if (estado === "APROBADO" || estado === "RECHAZADO") {
             dataToUpdate.cajeroId = session.user.id
         }
 
-        // 3. Actualizamos el estado y asignamos el cajero
+        // 3. Actualizamos el estado y asignamos el cajero. 
+        // IMPORTANTE: Incluimos 'detalles' y 'cajero' para que el Frontend actualice su estado completamente.
         const pagoActualizado = await prisma.pago.update({
             where: { id },
             data: dataToUpdate,
-            include: { cajero: true } // OBLIGATORIO: Para que el frontend pueda mostrar el nombre de quien aprobó
+            include: {
+                cajero: true,
+                detalles: true // Garantiza que los depósitos parciales regresen al frontend
+            }
         })
 
-        // Devolvemos el formato exacto que espera ListaPagos.tsx
         return NextResponse.json({
-            mensaje: `El pago fue ${estado} exitosamente.`,
+            mensaje: `El ticket maestro fue ${estado} exitosamente.`,
             pago: pagoActualizado
         })
     } catch (error) {
         console.error("Error al actualizar el pago:", error)
-        return NextResponse.json({ error: "Error al verificar pago" }, { status: 500 })
+        return NextResponse.json({ error: "Error interno al verificar el pago" }, { status: 500 })
     }
 }

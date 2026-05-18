@@ -29,6 +29,8 @@ export default async function VerPagosPage() {
         include: {
             cliente: true,
             cajero: true,
+            // AÑADIDO: Traemos los detalles para ver los múltiples vouchers
+            detalles: true,
             // AÑADIDO: Traemos los estudiantes para el reporte Excel
             estudiantes: {
                 select: { dni: true, nombres: true, apellidos: true }

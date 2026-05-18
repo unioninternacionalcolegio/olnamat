@@ -84,40 +84,46 @@ model User {
 }
 
 model Pago {
-  id               String          @id @default(cuid())
+  id              String          @id @default(cuid())
+  tipoComprobante TipoComprobante @default(TICKET_INTERNO)
+  serie           String          @default("T001")
+  correlativo     Int             @default(autoincrement())
   
-  // Datos del Comprobante
-  tipoComprobante  TipoComprobante @default(TICKET_INTERNO)
-  serie            String          @default("T001")
-  correlativo      Int             @default(autoincrement())
+  montoTotal      Float
+  descuento       Float           @default(0)
+  cuponId         String?         @unique
+  cupon           Cupon?          @relation(fields: [cuponId], references: [id])
   
-  montoTotal       Float
-  descuento        Float           @default(0) // Cuánto se descontó (Para imprimir en el comprobante)
-  cuponId          String?         @unique     // ID del cupón usado
-  cupon            Cupon?          @relation(fields: [cuponId], references: [id])
-  metodo           MetodoPago
-  numeroOperacion  String?
-  fechaHoraPago    DateTime?       @default(now())
+  // NUEVA RELACIÓN: Un ticket puede tener múltiples pagos parciales
+  detalles        DetallePago[]   
   
-  comprobanteUrl   String?         // Opcional para pagos en efectivo en caja
-  estado           EstadoPago      @default(APROBADO)
+  estado          EstadoPago      @default(APROBADO)
   
-  // Cliente (Delegado, Libre, IE)
-  clienteId        String
-  cliente          User            @relation("PagosCliente", fields: [clienteId], references: [id])
-
-  // Cajero/Asistente (quien emitió el ticket)
-  cajeroId         String?
-  cajero           User?           @relation("PagosCobrados", fields: [cajeroId], references: [id])
+  clienteId       String
+  cliente         User            @relation("PagosCliente", fields: [clienteId], references: [id])
+  cajeroId        String?
+  cajero          User?           @relation("PagosCobrados", fields: [cajeroId], references: [id])
   
-  estudiantes      Estudiante[]
-
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  estudiantes     Estudiante[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@unique([serie, correlativo])
 }
-
+model DetallePago {
+  id              String     @id @default(cuid())
+  pagoId          String
+  pago            Pago       @relation(fields: [pagoId], references: [id], onDelete: Cascade)
+  
+  metodo          MetodoPago
+  monto           Float
+  numeroOperacion String?
+  comprobanteUrl  String?
+  
+  fechaHoraPago   DateTime?  @default(now())
+  
+  createdAt       DateTime   @default(now())
+}
 model Estudiante {
   id               String         @id @default(cuid())
   dni              String?        @unique

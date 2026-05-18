@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 export default function RegistroLibrePage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
-    const [error, setError] = useState("")
+    const [errorModal, setErrorModal] = useState("") // Estado para el modal de error
     const [successData, setSuccessData] = useState<{ dni: string } | null>(null)
     const [configuraciones, setConfiguraciones] = useState<any[]>([])
     const [file, setFile] = useState<File | null>(null)
@@ -17,6 +17,7 @@ export default function RegistroLibrePage() {
         nombres: "",
         apellidos: "",
         celular: "",
+        colegio: "",
         localidad: "",
         nivel: "PRIMARIA",
         gradoOEdad: "",
@@ -107,16 +108,21 @@ export default function RegistroLibrePage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
-        setError("")
+        setErrorModal("")
 
-        if (!formData.nombres || !formData.apellidos || !formData.gradoOEdad || !file) {
-            setError("Por favor completa los nombres, apellidos, grado y adjunta tu voucher.")
+        if (!formData.dni || !formData.nombres || !formData.apellidos || !formData.colegio || !formData.gradoOEdad || !file) {
+            setErrorModal("Por favor completa el DNI, nombres, apellidos, colegio, grado y adjunta tu voucher.")
             setLoading(false)
             return
         }
-
+        const dniLimpio = formData.dni.trim();
+        if (dniLimpio.length !== 8 || !/^\d{8}$/.test(dniLimpio)) {
+            setErrorModal("El DNI debe contener exactamente 8 números.");
+            setLoading(false);
+            return;
+        }
         if (!formData.fechaPago || !formData.horaPago) {
-            setError("Es OBLIGATORIO ingresar la FECHA y la HORA exacta del voucher para la validación.")
+            setErrorModal("Es OBLIGATORIO ingresar la FECHA y la HORA exacta del voucher para la validación.")
             setLoading(false)
             return
         }
@@ -136,7 +142,7 @@ export default function RegistroLibrePage() {
             const datosAEnviar = {
                 ...formData,
                 comprobanteUrl: uploadResult.url,
-                institucion: "ALUMNO LIBRE"
+                institucion: `LIBRE-${formData.colegio.trim().toUpperCase()}`
             }
 
             const res = await fetch("/api/registro-libre", {
@@ -150,7 +156,8 @@ export default function RegistroLibrePage() {
 
             setSuccessData({ dni: data.estudiante.dni })
         } catch (err: any) {
-            setError(err.message)
+            // Aquí se lanza el error al modal
+            setErrorModal(err.message)
         } finally {
             setLoading(false)
         }
@@ -183,9 +190,29 @@ export default function RegistroLibrePage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
+
+            {/* MODAL DE ERRORES (DNI DUPLICADO, N° DE OPERACIÓN, ETC) */}
+            {errorModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center border-4 border-red-500 relative">
+                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black">
+                            !
+                        </div>
+                        <h3 className="text-2xl font-black text-gray-900 uppercase">Aviso</h3>
+                        <p className="text-gray-700 font-medium text-lg leading-relaxed">{errorModal}</p>
+                        <button
+                            onClick={() => setErrorModal("")}
+                            className="w-full bg-red-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-red-700 uppercase tracking-widest transition-all mt-4"
+                        >
+                            Entendido
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* MODAL DE NÚMEROS DE CUENTA */}
             {mostrarCuentas && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+                <div className="fixed inset-0 z-[40] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-6 relative border-4 border-blue-100">
                         <button
                             onClick={() => setMostrarCuentas(false)}
@@ -197,21 +224,19 @@ export default function RegistroLibrePage() {
                             <h3 className="text-xl font-black text-blue-900 uppercase tracking-wide">Métodos de Pago</h3>
                             <p className="text-sm text-gray-500 font-medium">Realiza tu depósito o transferencia</p>
                         </div>
-
-                        {/* AQUI PUEDES PONER TU IMAGEN REAL DE YAPE/PLIN */}
                         <div className="w-full h-48 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden">
-                            {/* Reemplaza la ruta de la imagen con la tuya (ej: src="/cuentas.png") */}
-                            <span className="text-gray-400 text-xs font-bold px-4 text-center">
-                                IMAGEN YAPE/PLIN<br />(Reemplazar en el código)
-                            </span>
-                            {/* <img src="/tu-imagen-aqui.jpg" alt="Cuentas" className="w-full h-full object-cover" /> */}
+                            <img
+                                src="/yape-plin.jpg"
+                                alt="Yape Plin"
+                                className="w-50 h-50 object-cover"
+                            />
                         </div>
 
                         <div className="bg-blue-50 p-4 rounded-2xl space-y-3">
                             <div className="border-b border-blue-100 pb-2">
                                 <p className="text-[11px] text-blue-600 font-bold uppercase">Yape / Plin</p>
                                 <p className="font-black text-gray-800">925 904 377</p>
-                                <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: JOSUE RIVEROS</p>
+                                <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: JOSUE RIVEROS CONOZCO</p>
                             </div>
                             <div className="border-b border-blue-100 pb-2">
                                 <p className="text-[11px] text-blue-600 font-bold uppercase">BCP Soles</p>
@@ -221,7 +246,7 @@ export default function RegistroLibrePage() {
                                 <p className="text-[11px] text-blue-600 font-bold uppercase">BBVA</p>
                                 <p className="font-black text-gray-800">04-123-456789</p>
                             </div>
-                            <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: UNION INTERNACIONAL SAC</p>
+                            <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: JOSUE RIVEROS CONOZCO</p>
                         </div>
 
                         <button onClick={() => setMostrarCuentas(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 uppercase text-sm tracking-widest transition-all">
@@ -238,15 +263,13 @@ export default function RegistroLibrePage() {
                 </div>
 
                 <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    {error && <div className="text-red-500 text-sm text-center bg-red-50 p-3 rounded-md border border-red-200">{error}</div>}
-
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="md:col-span-2 bg-blue-50 p-4 rounded-xl mb-2">
                             <h3 className="font-bold text-blue-800 mb-2">1. Datos del Estudiante</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">DNI (Opcional)</label>
-                                    <input name="dni" type="text" maxLength={8} value={formData.dni} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Si no tienes, déjalo en blanco" />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">DNI *</label>
+                                    <input name="dni" type="text" maxLength={8} required value={formData.dni} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Ingresa tu DNI" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Celular</label>
@@ -259,6 +282,10 @@ export default function RegistroLibrePage() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Apellidos *</label>
                                     <input name="apellidos" type="text" required value={formData.apellidos} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg uppercase" />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Nombre de tu Colegio / Institución *</label>
+                                    <input name="colegio" type="text" required value={formData.colegio} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg uppercase" placeholder="Ej. San Juan Bosco" />
                                 </div>
                                 <div className="md:col-span-2">
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Localidad / Ciudad *</label>
@@ -291,7 +318,6 @@ export default function RegistroLibrePage() {
                         <div className="md:col-span-2 bg-green-50 p-4 rounded-xl space-y-4">
                             <h3 className="font-bold text-green-800">3. Datos de Pago (Yape / Plin / Transferencia)</h3>
 
-                            {/* CAJA DINÁMICA DE PRECIO Y BOTÓN DE CUENTAS */}
                             <div className="bg-yellow-100 border-2 border-yellow-300 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div className="text-center md:text-left">
                                     <p className="text-[11px] font-black uppercase text-yellow-700 tracking-wider">Monto a pagar</p>

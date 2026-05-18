@@ -1,3 +1,4 @@
+// app/api/registro-libre/route.ts
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
@@ -11,20 +12,35 @@ export async function POST(req: Request) {
             nivel, gradoOEdad, numeroOperacion, fechaPago, horaPago, comprobanteUrl
         } = body
 
-        if (!nombres || !apellidos || !nivel || !gradoOEdad || !comprobanteUrl || !fechaPago || !horaPago) {
-            return NextResponse.json({ error: "Faltan datos obligatorios, incluyendo fecha y hora del voucher." }, { status: 400 })
+        // 1. Validar que los campos obligatorios existan (DNI e Institución son obligatorios)
+        if (!dni || !nombres || !apellidos || !institucion || !nivel || !gradoOEdad || !comprobanteUrl || !fechaPago || !horaPago) {
+            return NextResponse.json({ error: "Faltan datos obligatorios, incluyendo DNI, colegio, fecha y hora del voucher." }, { status: 400 })
         }
 
-        // 1. Generar DNI si está vacío
-        let finalDni = dni?.trim()
-        if (!finalDni) {
-            finalDni = `LIB-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 100)}`
+        const finalDni = dni.trim()
+        if (finalDni.length !== 8 || !/^\d{8}$/.test(finalDni)) {
+            return NextResponse.json({ error: "El DNI ingresado no es válido. Debe tener exactamente 8 números." }, { status: 400 })
         }
-
-        // Verificar DNI
+        // 2A. Verificar que el DNI no esté registrado como Usuario
         const userExists = await prisma.user.findUnique({ where: { dni: finalDni } })
         if (userExists) {
-            return NextResponse.json({ error: "Este DNI ya está registrado." }, { status: 400 })
+            return NextResponse.json({ error: "Este DNI ya tiene una cuenta registrada en el sistema." }, { status: 400 })
+        }
+
+        // 2B. Verificar que el DNI no esté registrado como Estudiante (AQUÍ ESTABA EL ERROR)
+        const estudianteExists = await prisma.estudiante.findUnique({ where: { dni: finalDni } })
+        if (estudianteExists) {
+            return NextResponse.json({ error: "Este DNI ya se encuentra inscrito como estudiante en el concurso." }, { status: 400 })
+        }
+
+        // 3. Verificar que el Número de Operación sea ÚNICO (si el usuario lo ingresó)
+        if (numeroOperacion && numeroOperacion.trim() !== "") {
+            const operacionExists = await prisma.pago.findFirst({
+                where: { numeroOperacion: numeroOperacion.trim() }
+            })
+            if (operacionExists) {
+                return NextResponse.json({ error: "Este número de operación ya fue usado. Verifica tu comprobante." }, { status: 400 })
+            }
         }
 
         const hashedPassword = await bcrypt.hash(finalDni, 10)
@@ -39,7 +55,7 @@ export async function POST(req: Request) {
         })
         const montoTotal = config ? config.costoLibreReg : 15 // Por defecto si no halla config
 
-        // 2. Ejecutar todo en una transacción
+        // 4. Ejecutar todo en una transacción
         const result = await prisma.$transaction(async (tx) => {
             // Crear el Usuario "Cliente"
             const newUser = await tx.user.create({
@@ -49,7 +65,7 @@ export async function POST(req: Request) {
                     password: hashedPassword,
                     celular: celular || null,
                     localidad: localidad ? localidad.toUpperCase() : "SIN ESPECIFICAR",
-                    institucion: institucion || "ALUMNO LIBRE", // Por seguridad lo forzamos aquí también
+                    institucion: institucion.toUpperCase(), // Ya viene con LIBRE- desde el front
                     tipoColegio: TipoColegio.LIBRE,
                     role: Role.LIBRE,
                 }
@@ -60,7 +76,7 @@ export async function POST(req: Request) {
                 data: {
                     montoTotal,
                     metodo: MetodoPago.YAPE, // Asumimos método digital por subir voucher
-                    numeroOperacion: numeroOperacion || null,
+                    numeroOperacion: numeroOperacion ? numeroOperacion.trim() : null,
                     fechaHoraPago: fechaHoraCompleta,
                     comprobanteUrl,
                     estado: EstadoPago.PENDIENTE,
@@ -77,7 +93,7 @@ export async function POST(req: Request) {
                     apellidos: apellidos.toUpperCase(),
                     nivel: nivel as Nivel,
                     gradoOEdad,
-                    institucion: institucion || "ALUMNO LIBRE",
+                    institucion: institucion.toUpperCase(), // Ya viene con LIBRE- desde el front
                     localidad: localidad ? localidad.toUpperCase() : "SIN ESPECIFICAR",
                     estadoRegistro: EstadoRegistro.COMPLETO,
                     creadorId: newUser.id,

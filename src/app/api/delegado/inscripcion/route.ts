@@ -10,13 +10,13 @@ export async function POST(req: Request) {
         if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
         const body = await req.json()
-        const { estudiantes, comprobanteUrl, numeroOperacion, metodo, montoTotal, tipoComprobante, codigoCupon } = body
+        const { estudiantes, montoTotal, tipoComprobante, codigoCupon, pagosParciales } = body
 
         if (!estudiantes || estudiantes.length === 0) {
             return NextResponse.json({ error: "Debe incluir al menos un estudiante" }, { status: 400 })
         }
-        if (!metodo || montoTotal === undefined) { // Cambiado a undefined para permitir pago 0
-            return NextResponse.json({ error: "Faltan datos del pago" }, { status: 400 })
+        if (montoTotal === undefined || !pagosParciales) {
+            return NextResponse.json({ error: "Faltan datos del pago o configuración de recibos." }, { status: 400 })
         }
 
         const creador = await prisma.user.findUnique({
@@ -26,48 +26,62 @@ export async function POST(req: Request) {
         if (!creador) return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
 
         const resultado = await prisma.$transaction(async (tx) => {
-            // A. LÓGICA DE CUPONES (¡NUEVO!)
+            // A. LÓGICA DE CUPONES
             let descuentoReal = 0;
             let cuponUsadoId = null;
 
             if (codigoCupon) {
-                // Verificamos si el cupón existe y es válido
-                const cupon = await tx.cupon.findUnique({
-                    where: { codigo: codigoCupon }
-                })
-
+                const cupon = await tx.cupon.findUnique({ where: { codigo: codigoCupon } })
                 if (!cupon) throw new Error("El código de cupón no existe.")
                 if (cupon.usado) throw new Error("El cupón ya fue utilizado.")
 
                 descuentoReal = cupon.monto;
                 cuponUsadoId = cupon.id;
 
-                // Marcamos el cupón como usado AHORA MISMO dentro de la transacción
                 await tx.cupon.update({
                     where: { id: cupon.id },
                     data: { usado: true }
                 })
             }
 
-            // Calculamos el monto final a guardar (por si mandaron un total hackeado desde el frontend)
+            // Validar que no nos manden números de operación ya usados desde Postman/hack
+            const numsOperacion = pagosParciales.map((p: any) => p.numeroOperacion).filter(Boolean);
+            if (numsOperacion.length > 0) {
+                const opsExistentes = await tx.detallePago.findMany({
+                    where: { numeroOperacion: { in: numsOperacion } }
+                });
+                if (opsExistentes.length > 0) {
+                    throw new Error(`Los números de operación: ${opsExistentes.map(o => o.numeroOperacion).join(", ")} ya están registrados.`);
+                }
+            }
+
+            // Calculamos el monto final a guardar
             const montoFinal = Math.max(0, parseFloat(montoTotal) - descuentoReal);
 
-            // B. Crear el recibo de Pago
+            // B. Crear el recibo de Pago Maestro y sus Detalles (Pagos Parciales)
             const nuevoPago = await tx.pago.create({
                 data: {
                     montoTotal: montoFinal,
-                    descuento: descuentoReal,          // Guardamos cuánto se descontó
-                    cuponId: cuponUsadoId,             // Vinculamos el cupón al pago
-                    metodo: metodo,
-                    numeroOperacion: numeroOperacion || null,
-                    comprobanteUrl: comprobanteUrl || null,
+                    descuento: descuentoReal,
+                    cuponId: cuponUsadoId,
                     estado: EstadoPago.PENDIENTE,
                     tipoComprobante: tipoComprobante || TipoComprobante.BOLETA,
                     clienteId: creador.id,
+
+                    // AQUÍ INSERTAMOS LOS MÚLTIPLES PAGOS
+                    detalles: {
+                        create: pagosParciales.map((p: any) => ({
+                            metodo: p.metodo,
+                            monto: p.monto,
+                            numeroOperacion: p.numeroOperacion || null,
+                            comprobanteUrl: p.comprobanteUrl || null,
+                            fechaHoraPago: p.fechaHoraPago ? new Date(p.fechaHoraPago) : new Date() // Si agregaste el campo a Prisma
+                        }))
+                    }
                 }
             })
 
-            // C. Preparar la lista de estudiantes
+            // C. Preparar e Insertar Estudiantes (Heredando el colegio dinámico del frontend)
             const estudiantesData = estudiantes.map((est: any) => {
                 const estaCompleto = est.dni && est.nombres && est.apellidos
 
@@ -77,16 +91,16 @@ export async function POST(req: Request) {
                     apellidos: est.apellidos || null,
                     nivel: est.nivel,
                     gradoOEdad: est.gradoOEdad,
-                    institucion: creador.institucion || 'Independiente',
+                    // Usamos el colegio y tipo que editó el delegado, o el suyo por defecto
+                    institucion: est.institucion || creador.institucion || 'Independiente',
+                    tipoColegio: est.tipoColegio || creador.tipoColegio || 'ESTATAL',
                     localidad: creador.localidad || 'S/L',
-                    tipoColegio: creador.tipoColegio,
                     estadoRegistro: estaCompleto ? EstadoRegistro.COMPLETO : EstadoRegistro.INCOMPLETO,
                     creadorId: creador.id,
                     pagoId: nuevoPago.id
                 }
             })
 
-            // D. Insertar estudiantes
             await tx.estudiante.createMany({
                 data: estudiantesData
             })
@@ -98,16 +112,12 @@ export async function POST(req: Request) {
 
     } catch (error: any) {
         console.error("Error en API inscripción:", error)
-
         if (error.code === 'P2002' && error.meta?.target?.includes('dni')) {
-            return NextResponse.json({ error: "Uno de los DNI ingresados ya está registrado en el concurso." }, { status: 400 })
+            return NextResponse.json({ error: "Uno de los DNI ingresados ya está registrado." }, { status: 400 })
         }
-
-        // Devolver el mensaje de error personalizado del cupón si es el caso
-        if (error.message.includes("cupón")) {
+        if (error.message.includes("cupón") || error.message.includes("operación")) {
             return NextResponse.json({ error: error.message }, { status: 400 })
         }
-
-        return NextResponse.json({ error: "Error interno del servidor al procesar la inscripción" }, { status: 500 })
+        return NextResponse.json({ error: "Error interno al procesar la inscripción" }, { status: 500 })
     }
 }

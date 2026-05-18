@@ -1,4 +1,3 @@
-// src/app/api/caja/ticket/route.ts
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { Nivel, MetodoPago, TipoComprobante, EstadoRegistro, TipoColegio } from "@prisma/client"
@@ -10,13 +9,13 @@ export async function POST(req: Request) {
             cajeroId,
             clienteId,
             metodoPago,
-            subtotal,
             descuento,
             montoTotal,
             numeroOperacion,
             fechaPago,
             horaPago,
-            items
+            items,
+            pagosParciales // <-- Añadido por si en el futuro envías múltiples métodos desde el front
         } = body
 
         if (!clienteId) return NextResponse.json({ error: "Falta el ID del cliente (Delegado/Libre)." }, { status: 400 })
@@ -32,17 +31,38 @@ export async function POST(req: Request) {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+
+            // Lógica inteligente: Si nos envían un array de 'pagosParciales', lo usamos.
+            // Si no, transformamos los datos sueltos (metodoPago, montoTotal) en un array de 1 elemento.
+            const detallesParaInsertar = pagosParciales && pagosParciales.length > 0
+                ? pagosParciales.map((p: any) => ({
+                    metodo: p.metodo,
+                    monto: Number(p.monto),
+                    numeroOperacion: p.numeroOperacion || null,
+                    fechaHoraPago: p.fechaHoraPago ? new Date(p.fechaHoraPago) : new Date()
+                }))
+                : [
+                    {
+                        metodo: metodoPago as MetodoPago,
+                        monto: montoTotal, // Asume que paga todo el ticket con este método
+                        numeroOperacion: numeroOperacion || null,
+                        fechaHoraPago: fechaPago && horaPago ? new Date(`${fechaPago}T${horaPago}`) : new Date()
+                    }
+                ];
+
+            // CREACIÓN DEL PAGO MAESTRO
             const nuevoPago = await tx.pago.create({
                 data: {
-                    // ELIMINAMOS subtotal porque no está en el schema de Prisma
-                    descuento: descuento || 0, // Si te da error, debes agregar la columna "descuento" a tu tabla Pago en schema.prisma
+                    descuento: descuento || 0,
                     montoTotal: montoTotal,
-                    metodo: metodoPago as MetodoPago,
-                    numeroOperacion: numeroOperacion || null,
-                    fechaHoraPago: fechaPago && horaPago ? new Date(`${fechaPago}T${horaPago}`) : new Date(),
                     tipoComprobante: TipoComprobante.TICKET_INTERNO,
                     clienteId,
-                    cajeroId: cajeroId || null
+                    cajeroId: cajeroId || null,
+
+                    // Ahora guardamos los comprobantes en la tabla hija "DetallePago"
+                    detalles: {
+                        create: detallesParaInsertar
+                    }
                 }
             })
 
@@ -57,7 +77,6 @@ export async function POST(req: Request) {
                     let nombresEstudiante = null;
                     let apellidosEstudiante = null;
 
-                    // CORRECCIÓN TS: Declaramos explícitamente que es del tipo enum EstadoRegistro
                     let estadoReg: EstadoRegistro = EstadoRegistro.INCOMPLETO;
 
                     if (esRegistroLibreConDatos) {

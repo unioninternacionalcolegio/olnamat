@@ -1,12 +1,12 @@
+//app/(dashboard)/admin/ver-pagos/ListaPagos.tsx
 "use client"
 import { useState, useMemo } from "react"
-import { Check, X, Eye, ExternalLink, Calendar, Printer, Search, FileSpreadsheet, UserCheck } from "lucide-react"
+import { Check, X, Eye, ExternalLink, Calendar, Printer, Search, FileSpreadsheet, UserCheck, Wallet, Image as ImageIcon, CheckCircle } from "lucide-react"
 import * as XLSX from "xlsx"
 
 type TabType = "TODOS" | "COLEGIO" | "DELEGADO" | "LIBRE"
 type MetodoFiltro = "YAPE_PLIN" | "TRANSFERENCIA" | "EFECTIVO" | null
 
-// Obtiene la fecha local actual en formato YYYY-MM-DD
 const getLocalToday = () => {
     const tzOffset = (new Date()).getTimezoneOffset() * 60000;
     return (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
@@ -25,7 +25,6 @@ export default function ListaPagos({
     const [pagoEnRevision, setPagoEnRevision] = useState<any>(null)
     const [loading, setLoading] = useState(false)
 
-    // ESTADOS PARA FILTROS
     const [activeTab, setActiveTab] = useState<TabType>("TODOS")
     const [searchTerm, setSearchTerm] = useState("")
     const [fechaInicio, setFechaInicio] = useState(getLocalToday())
@@ -33,7 +32,6 @@ export default function ListaPagos({
     const [soloMisCobros, setSoloMisCobros] = useState(false)
     const [metodoFiltro, setMetodoFiltro] = useState<MetodoFiltro>(null)
 
-    // FUNCIÓN DE PROCESAMIENTO
     const procesar = async (id: string, nuevoEstado: 'APROBADO' | 'RECHAZADO') => {
         setLoading(true)
         try {
@@ -47,9 +45,10 @@ export default function ListaPagos({
 
             setPagos(pagos.map(p => p.id === id ? {
                 ...p,
+                ...data.pago,
                 estado: nuevoEstado,
-                correlativo: data.pago?.correlativo,
-                cajero: data.pago?.cajero
+                cajero: data.pago?.cajero || p.cajero,
+                detalles: data.pago?.detalles || p.detalles
             } : p))
 
             setPagoEnRevision(null)
@@ -65,37 +64,35 @@ export default function ListaPagos({
         }
     }
 
-    // ===================== FILTRADO PARA LA TABLA =====================
     const pagosFiltrados = useMemo(() => {
         return pagos.filter(p => {
-            // Filtro por tab
-            if (activeTab !== "TODOS" && p.cliente.role !== activeTab && !(activeTab === "COLEGIO" && p.cliente.role === "REPRESENTANTE_IE")) {
-                return false
-            }
-            // Filtro solo mis cobros
-            if (soloMisCobros && p.cajeroId !== currentUserId && p.estado !== 'PENDIENTE') {
-                return false
-            }
-            // Filtro por método de pago (SOLO AFECTA A LA TABLA)
+            if (activeTab !== "TODOS" && p.cliente.role !== activeTab && !(activeTab === "COLEGIO" && p.cliente.role === "REPRESENTANTE_IE")) return false
+            if (soloMisCobros && p.cajeroId !== currentUserId && p.estado !== 'PENDIENTE') return false
+
             if (metodoFiltro) {
-                if (metodoFiltro === "YAPE_PLIN") {
-                    if (p.metodo !== 'YAPE' && p.metodo !== 'PLIN') return false
-                } else if (metodoFiltro === "TRANSFERENCIA") {
-                    if (p.metodo !== 'TRANSFERENCIA') return false
-                } else if (metodoFiltro === "EFECTIVO") {
-                    if (p.metodo !== 'EFECTIVO') return false
-                }
+                // Compatible con pagos nuevos (detalles) y antiguos (p.metodo)
+                const metodoAntiguo = p.metodo;
+                const tieneYapePlin = p.detalles?.some((d: any) => d.metodo === 'YAPE' || d.metodo === 'PLIN') || (metodoAntiguo === 'YAPE' || metodoAntiguo === 'PLIN');
+                const tieneTransf = p.detalles?.some((d: any) => d.metodo === 'TRANSFERENCIA') || metodoAntiguo === 'TRANSFERENCIA';
+                const tieneEfectivo = p.detalles?.some((d: any) => d.metodo === 'EFECTIVO') || metodoAntiguo === 'EFECTIVO';
+
+                if (metodoFiltro === "YAPE_PLIN" && !tieneYapePlin) return false
+                if (metodoFiltro === "TRANSFERENCIA" && !tieneTransf) return false
+                if (metodoFiltro === "EFECTIVO" && !tieneEfectivo) return false
             }
-            // Búsqueda
+
             if (searchTerm) {
                 const term = searchTerm.toLowerCase()
                 const nameMatch = p.cliente.name?.toLowerCase().includes(term)
                 const cajeroMatch = p.cajero?.name?.toLowerCase().includes(term)
                 const dniMatch = p.cliente.dni?.includes(term)
                 const compMatch = p.correlativo && `${p.serie}-${String(p.correlativo).padStart(6, '0')}`.toLowerCase().includes(term)
-                if (!nameMatch && !dniMatch && !compMatch && !cajeroMatch) return false
+                const opMatchNuevo = p.detalles?.some((d: any) => d.numeroOperacion?.toLowerCase().includes(term))
+                const opMatchViejo = p.numeroOperacion?.toLowerCase().includes(term)
+
+                if (!nameMatch && !dniMatch && !compMatch && !cajeroMatch && !opMatchNuevo && !opMatchViejo) return false
             }
-            // Filtro por fecha
+
             if (fechaInicio || fechaFin) {
                 const fechaPagoStr = new Date(p.createdAt).toISOString().split('T')[0]
                 if (fechaInicio && fechaPagoStr < fechaInicio) return false
@@ -109,15 +106,10 @@ export default function ListaPagos({
         })
     }, [pagos, activeTab, searchTerm, fechaInicio, fechaFin, soloMisCobros, currentUserId, metodoFiltro])
 
-    // ===================== TOTALES GLOBALES (SIN FILTRO DE MÉTODO) =====================
     const totales = useMemo(() => {
         const filtradosParaTotales = pagos.filter(p => {
-            if (activeTab !== "TODOS" && p.cliente.role !== activeTab && !(activeTab === "COLEGIO" && p.cliente.role === "REPRESENTANTE_IE")) {
-                return false
-            }
-            if (soloMisCobros && p.cajeroId !== currentUserId && p.estado !== 'PENDIENTE') {
-                return false
-            }
+            if (activeTab !== "TODOS" && p.cliente.role !== activeTab && !(activeTab === "COLEGIO" && p.cliente.role === "REPRESENTANTE_IE")) return false
+            if (soloMisCobros && p.cajeroId !== currentUserId && p.estado !== 'PENDIENTE') return false
             if (fechaInicio || fechaFin) {
                 const fechaPagoStr = new Date(p.createdAt).toISOString().split('T')[0]
                 if (fechaInicio && fechaPagoStr < fechaInicio) return false
@@ -133,27 +125,31 @@ export default function ListaPagos({
 
         aprobados.forEach(p => {
             recaudado += p.montoTotal;
-            if (p.metodo === 'YAPE' || p.metodo === 'PLIN') yapePlin += p.montoTotal;
-            if (p.metodo === 'TRANSFERENCIA') transferencia += p.montoTotal;
-            if (p.metodo === 'EFECTIVO') efectivo += p.montoTotal;
+
+            // Validar si es pago nuevo (múltiple) o viejo (único)
+            if (p.detalles && p.detalles.length > 0) {
+                p.detalles.forEach((d: any) => {
+                    if (d.metodo === 'YAPE' || d.metodo === 'PLIN') yapePlin += d.monto;
+                    if (d.metodo === 'TRANSFERENCIA') transferencia += d.monto;
+                    if (d.metodo === 'EFECTIVO') efectivo += d.monto;
+                });
+            } else {
+                if (p.metodo === 'YAPE' || p.metodo === 'PLIN') yapePlin += p.montoTotal;
+                if (p.metodo === 'TRANSFERENCIA') transferencia += p.montoTotal;
+                if (p.metodo === 'EFECTIVO') efectivo += p.montoTotal;
+            }
         });
 
         return {
             dineroRecaudado: recaudado,
             alumnosInscritos: aprobados.reduce((sum, p) => sum + p._count.estudiantes, 0),
             pendientesCount: filtradosParaTotales.filter(p => p.estado === 'PENDIENTE').length,
-            yapePlin,
-            transferencia,
-            efectivo
+            yapePlin, transferencia, efectivo
         }
     }, [pagos, activeTab, fechaInicio, fechaFin, soloMisCobros, currentUserId])
 
-    // Toggle del filtro de método
-    const toggleMetodoFiltro = (metodo: MetodoFiltro) => {
-        setMetodoFiltro(metodoFiltro === metodo ? null : metodo)
-    }
+    const toggleMetodoFiltro = (metodo: MetodoFiltro) => setMetodoFiltro(metodoFiltro === metodo ? null : metodo)
 
-    // EXPORTAR A EXCEL
     const handleExportarExcel = () => {
         const aprobados = pagosFiltrados.filter(p => p.estado === 'APROBADO');
         if (aprobados.length === 0) return alert("No hay cobros aprobados para exportar con los filtros actuales.");
@@ -162,15 +158,21 @@ export default function ListaPagos({
             const listaEstudiantes = p.estudiantes?.map((e: any) => `${e.nombres} ${e.apellidos} (${e.dni || 'Sin DNI'})`).join(" | ") || "N/A";
             const fechaHora = new Date(p.createdAt).toLocaleString();
 
+            const esNuevo = p.detalles && p.detalles.length > 0;
+            const metodosUsados = esNuevo ? p.detalles.map((d: any) => d.metodo).join(" + ") : p.metodo;
+            const operaciones = esNuevo
+                ? p.detalles.map((d: any) => d.numeroOperacion).filter(Boolean).join(" | ")
+                : (p.numeroOperacion || "N/A");
+
             return {
                 "Comprobante": p.correlativo ? `${p.serie}-${String(p.correlativo).padStart(6, '0')}` : "N/A",
                 "Fecha y Hora": fechaHora,
                 "Cliente (Quien Pagó)": p.cliente.name || "Sin nombre",
                 "Estudiantes Inscritos": listaEstudiantes,
-                "Método": p.metodo,
-                "Nro Operación": p.numeroOperacion || "N/A",
+                "Métodos de Pago": metodosUsados,
+                "Nro Operaciones": operaciones,
                 "Descuento": p.descuento > 0 ? `S/ ${p.descuento}` : "S/ 0",
-                "Total Cobrado": `S/ ${p.montoTotal}`,
+                "Total Pagado": `S/ ${p.montoTotal}`,
                 "Cajero / Aprobador": p.cajero?.name || "N/A"
             }
         });
@@ -178,8 +180,7 @@ export default function ListaPagos({
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte_Caja");
-        const fileName = `Reporte_Caja_${fechaInicio}_al_${fechaFin}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
+        XLSX.writeFile(workbook, `Reporte_Caja_${fechaInicio}_al_${fechaFin}.xlsx`);
     }
 
     return (
@@ -199,48 +200,28 @@ export default function ListaPagos({
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl shadow-sm md:col-span-2">
                     <p className="text-blue-800 text-xs font-bold uppercase mb-3">Desglose por Método (click para filtrar)</p>
                     <div className="grid grid-cols-3 gap-3 text-center">
-                        <button
-                            onClick={() => toggleMetodoFiltro("YAPE_PLIN")}
-                            className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "YAPE_PLIN" ? 'border-purple-500 ring-2 ring-purple-200' : 'border-blue-100'}`}
-                        >
+                        <button onClick={() => toggleMetodoFiltro("YAPE_PLIN")} className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "YAPE_PLIN" ? 'border-purple-500 ring-2 ring-purple-200' : 'border-blue-100'}`}>
                             <p className="text-[10px] text-gray-500 uppercase font-bold">YAPE / PLIN</p>
                             <p className="font-bold text-purple-600 text-lg">S/ {totales.yapePlin.toFixed(2)}</p>
                         </button>
-
-                        <button
-                            onClick={() => toggleMetodoFiltro("TRANSFERENCIA")}
-                            className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "TRANSFERENCIA" ? 'border-blue-500 ring-2 ring-blue-200' : 'border-blue-100'}`}
-                        >
+                        <button onClick={() => toggleMetodoFiltro("TRANSFERENCIA")} className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "TRANSFERENCIA" ? 'border-blue-500 ring-2 ring-blue-200' : 'border-blue-100'}`}>
                             <p className="text-[10px] text-gray-500 uppercase font-bold">TRANSFERENCIA</p>
                             <p className="font-bold text-blue-600 text-lg">S/ {totales.transferencia.toFixed(2)}</p>
                         </button>
-
-                        <button
-                            onClick={() => toggleMetodoFiltro("EFECTIVO")}
-                            className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "EFECTIVO" ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-blue-100'}`}
-                        >
+                        <button onClick={() => toggleMetodoFiltro("EFECTIVO")} className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "EFECTIVO" ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-blue-100'}`}>
                             <p className="text-[10px] text-gray-500 uppercase font-bold">EFECTIVO</p>
                             <p className="font-bold text-emerald-600 text-lg">S/ {totales.efectivo.toFixed(2)}</p>
                         </button>
                     </div>
-                    {metodoFiltro && (
-                        <p className="text-center text-xs text-blue-600 mt-3 font-medium">
-                            Filtrando tabla por: {metodoFiltro === "YAPE_PLIN" ? "Yape / Plin" : metodoFiltro} • Click nuevamente para quitar
-                        </p>
-                    )}
                 </div>
             </div>
 
-            {/* Resto del componente (igual que antes) */}
+            {/* FILTROS Y BÚSQUEDA */}
             <div className="bg-white p-4 rounded-xl shadow-sm border space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
                     <div className="flex flex-wrap space-x-2">
                         {(["TODOS", "COLEGIO", "DELEGADO", "LIBRE"] as TabType[]).map(tab => (
-                            <button
-                                key={tab}
-                                onClick={() => setActiveTab(tab)}
-                                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === tab ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-                            >
+                            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors ${activeTab === tab ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                                 {tab}
                             </button>
                         ))}
@@ -250,15 +231,11 @@ export default function ListaPagos({
                         {role === "ADMINISTRADOR" && (
                             <label className="flex items-center space-x-2 cursor-pointer text-sm font-bold text-gray-700 bg-gray-50 px-3 py-2 rounded-lg border">
                                 <input type="checkbox" checked={soloMisCobros} onChange={(e) => setSoloMisCobros(e.target.checked)} className="rounded text-blue-600 w-4 h-4" />
-                                <span>Ver solo mis cobros</span>
+                                <span>Mis cobros</span>
                             </label>
                         )}
-                        <button
-                            onClick={handleExportarExcel}
-                            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center shadow-md transition-colors"
-                        >
-                            <FileSpreadsheet className="w-5 h-5 mr-2" />
-                            Reporte Excel
+                        <button onClick={handleExportarExcel} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center shadow-md transition-colors">
+                            <FileSpreadsheet className="w-5 h-5 mr-2" /> Reporte Excel
                         </button>
                     </div>
                 </div>
@@ -266,34 +243,19 @@ export default function ListaPagos({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative">
                         <Search className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar por Nombre, DNI, Ticket..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50 text-sm"
-                        />
+                        <input type="text" placeholder="Buscar por Nombre, DNI, Ticket, Operación..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50 text-sm" />
                     </div>
                     <div className="flex items-center space-x-2">
                         <span className="text-xs font-bold text-gray-500 uppercase w-12">Desde</span>
-                        <input
-                            type="date"
-                            value={fechaInicio}
-                            onChange={(e) => setFechaInicio(e.target.value)}
-                            className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-sm text-gray-600"
-                        />
+                        <input type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-sm text-gray-600" />
                     </div>
                     <div className="flex items-center space-x-2">
                         <span className="text-xs font-bold text-gray-500 uppercase w-12">Hasta</span>
-                        <input
-                            type="date"
-                            value={fechaFin}
-                            onChange={(e) => setFechaFin(e.target.value)}
-                            className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-sm text-gray-600"
-                        />
+                        <input type="date" value={fechaFin} onChange={(e) => setFechaFin(e.target.value)} className="w-full px-4 py-2 border rounded-lg bg-gray-50 text-sm text-gray-600" />
                     </div>
                 </div>
             </div>
+
             {/* TABLA PRINCIPAL */}
             <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
                 <table className="w-full text-left min-w-max">
@@ -303,176 +265,197 @@ export default function ListaPagos({
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Cliente / Delegado</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Aprobado Por</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Cupos</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Monto</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Monto & Método</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Acciones</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {pagosFiltrados.length === 0 ? (
                             <tr><td colSpan={6} className="p-8 text-center text-gray-500 font-bold italic">No se encontraron pagos con estos filtros.</td></tr>
-                        ) : pagosFiltrados.map((p) => (
-                            <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="p-4">
-                                    <div className="flex flex-col items-start gap-1">
-                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${p.estado === 'APROBADO' ? 'bg-green-100 text-green-700' :
-                                            p.estado === 'PENDIENTE' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
-                                            }`}>
-                                            {p.estado}
-                                        </span>
-                                        {p.estado === 'APROBADO' && p.correlativo && (
-                                            <span className="text-xs font-black text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 shadow-sm">
-                                                {p.serie}-{String(p.correlativo).padStart(6, '0')}
-                                            </span>
-                                        )}
-                                    </div>
-                                </td>
+                        ) : pagosFiltrados.map((p) => {
+                            const isMultiple = p.detalles && p.detalles.length > 1;
+                            const firstMetodo = p.detalles?.length > 0 ? p.detalles[0].metodo : (p.metodo || "N/A");
 
-                                <td className="p-4">
-                                    <p className="font-bold text-sm text-gray-800 flex items-center">
-                                        {p.cliente.name}
-                                        <span className="ml-2 text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">{p.cliente.role.replace("REPRESENTANTE_IE", "COLEGIO")}</span>
-                                    </p>
-                                    <p className="text-xs text-gray-500 flex items-center mt-0.5">
-                                        <Calendar className="w-3 h-3 mr-1" /> {new Date(p.createdAt).toLocaleDateString()}
-                                    </p>
-                                </td>
-
-                                <td className="p-4">
-                                    {p.estado !== 'PENDIENTE' && p.cajero ? (
-                                        <div className="flex flex-col items-start">
-                                            <span className="text-[11px] font-bold text-purple-700 bg-purple-50 inline-flex items-center px-2 py-1 rounded border border-purple-100 shadow-sm">
-                                                <UserCheck className="w-3 h-3 mr-1" />
-                                                {p.cajero.name}
+                            return (
+                                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                                    <td className="p-4">
+                                        <div className="flex flex-col items-start gap-1">
+                                            <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${p.estado === 'APROBADO' ? 'bg-green-100 text-green-700' : p.estado === 'PENDIENTE' ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>
+                                                {p.estado}
                                             </span>
+                                            {p.estado === 'APROBADO' && p.correlativo && (
+                                                <span className="text-xs font-black text-gray-700 bg-gray-100 px-2 py-0.5 rounded border border-gray-200 shadow-sm">
+                                                    {p.serie}-{String(p.correlativo).padStart(6, '0')}
+                                                </span>
+                                            )}
                                         </div>
-                                    ) : (
-                                        <span className="text-[11px] text-gray-400 italic bg-gray-100 px-2 py-1 rounded">Por asignar</span>
-                                    )}
-                                </td>
-
-                                <td className="p-4 text-center font-bold text-gray-600">
-                                    <span className="bg-gray-100 px-3 py-1 rounded-full">{p._count.estudiantes}</span>
-                                </td>
-                                <td className="p-4 text-center">
-                                    <p className="font-black text-green-600">S/ {p.montoTotal.toFixed(2)}</p>
-                                    {p.descuento > 0 && (
-                                        <p className="text-[10px] text-red-500 font-bold mt-0.5" title="Cupón">- S/ {p.descuento}</p>
-                                    )}
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5">{p.metodo}</p>
-                                </td>
-                                <td className="p-4">
-                                    <div className="flex justify-center space-x-2">
-                                        <button
-                                            onClick={() => setPagoEnRevision(p)}
-                                            className="flex items-center space-x-1 bg-white border border-gray-300 hover:bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-sm transition-colors font-bold shadow-sm"
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                            <span>Revisar</span>
-                                        </button>
-
-                                        {p.estado === 'APROBADO' && (
-                                            <button
-                                                onClick={() => window.open(`/admin/ticket/${p.id}`, '_blank')}
-                                                className="flex items-center space-x-1 bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-sm transition-colors font-bold shadow-sm"
-                                                title="Reimprimir Ticket"
-                                            >
-                                                <Printer className="w-4 h-4" />
-                                            </button>
+                                    </td>
+                                    <td className="p-4">
+                                        <p className="font-bold text-sm text-gray-800 flex items-center">
+                                            {p.cliente.name}
+                                            <span className="ml-2 text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">{p.cliente.role.replace("REPRESENTANTE_IE", "COLEGIO")}</span>
+                                        </p>
+                                        <p className="text-xs text-gray-500 flex items-center mt-0.5">
+                                            <Calendar className="w-3 h-3 mr-1" /> {new Date(p.createdAt).toLocaleDateString()}
+                                        </p>
+                                    </td>
+                                    <td className="p-4">
+                                        {p.estado !== 'PENDIENTE' && p.cajero ? (
+                                            <div className="flex flex-col items-start">
+                                                <span className="text-[11px] font-bold text-purple-700 bg-purple-50 inline-flex items-center px-2 py-1 rounded border border-purple-100 shadow-sm">
+                                                    <UserCheck className="w-3 h-3 mr-1" /> {p.cajero.name}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <span className="text-[11px] text-gray-400 italic bg-gray-100 px-2 py-1 rounded">Por asignar</span>
                                         )}
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
+                                    </td>
+                                    <td className="p-4 text-center font-bold text-gray-600">
+                                        <span className="bg-gray-100 px-3 py-1 rounded-full">{p._count.estudiantes}</span>
+                                    </td>
+                                    <td className="p-4 text-center">
+                                        <p className="font-black text-green-600">S/ {p.montoTotal.toFixed(2)}</p>
+                                        {p.descuento > 0 && <p className="text-[10px] text-red-500 font-bold mt-0.5">- S/ {p.descuento}</p>}
+                                        <p className={`text-[10px] font-bold uppercase mt-1 px-2 py-0.5 rounded inline-block ${isMultiple ? 'bg-blue-100 text-blue-700' : 'text-gray-400'}`}>
+                                            {isMultiple ? "MÚLTIPLE" : firstMetodo}
+                                        </p>
+                                    </td>
+                                    <td className="p-4">
+                                        <div className="flex justify-center space-x-2">
+                                            <button onClick={() => setPagoEnRevision(p)} className="flex items-center space-x-1 bg-white border border-gray-300 hover:bg-blue-50 text-blue-600 px-3 py-1.5 rounded-lg text-sm transition-colors font-bold shadow-sm">
+                                                <Eye className="w-4 h-4" /> <span>Revisar</span>
+                                            </button>
+                                            {p.estado === 'APROBADO' && (
+                                                <button onClick={() => window.open(`/admin/ticket/${p.id}`, '_blank')} className="flex items-center space-x-1 bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-sm transition-colors font-bold shadow-sm" title="Reimprimir Ticket">
+                                                    <Printer className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            )
+                        })}
                     </tbody>
                 </table>
             </div>
 
-            {/* MODAL DE REVISIÓN (Queda igual, abre el panel lateral/modal) */}
+            {/* ================= MODAL DE REVISIÓN MULTI-PAGO (CON RETROCOMPATIBILIDAD) ================= */}
             {pagoEnRevision && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
                         <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="font-black text-gray-800">Revisión de Comprobante - {pagoEnRevision.cliente.name}</h3>
+                            <h3 className="font-black text-gray-800 flex items-center">
+                                <Wallet className="w-5 h-5 mr-2 text-blue-600" />
+                                Revisión de Ticket - {pagoEnRevision.cliente.name}
+                            </h3>
                             <button onClick={() => setPagoEnRevision(null)} className="text-gray-400 hover:text-red-500 font-bold transition-colors">Cerrar</button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div className="space-y-4">
-                                <p className="text-sm font-black text-gray-500 uppercase">Imagen del Voucher</p>
-                                {pagoEnRevision.comprobanteUrl ? (
-                                    <>
-                                        <img src={pagoEnRevision.comprobanteUrl} alt="Voucher" className="w-full rounded-xl border-2 border-gray-100 shadow-md object-contain max-h-[400px] bg-gray-50" />
-                                        <a href={pagoEnRevision.comprobanteUrl} target="_blank" className="text-blue-600 text-xs flex items-center justify-center hover:underline font-bold bg-blue-50 py-2 rounded-lg transition-colors">
-                                            <ExternalLink className="w-4 h-4 mr-1.5" /> Abrir imagen en pantalla completa
-                                        </a>
-                                    </>
-                                ) : (
-                                    <div className="aspect-video bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 italic font-bold">
-                                        No se subió imagen
+                        <div className="flex-1 overflow-y-auto p-6 bg-gray-50/50">
+                            <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 shadow-inner mb-6">
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div>
+                                        <p className="text-xs text-blue-600 font-bold uppercase mb-1">Monto Pagar (Final)</p>
+                                        <p className="text-2xl font-black text-green-600">S/ {pagoEnRevision.montoTotal.toFixed(2)}</p>
                                     </div>
-                                )}
-                            </div>
-
-                            <div className="space-y-6">
-                                <div className="bg-blue-50 p-5 rounded-2xl border border-blue-100 shadow-inner">
-                                    <h4 className="font-black text-blue-800 mb-4">Detalles del Depósito</h4>
-                                    <div className="space-y-3 text-sm">
-                                        <div className="flex justify-between border-b border-blue-200/50 pb-2">
-                                            <span className="text-blue-700 font-medium">Monto Pagar (Final):</span>
-                                            <span className="font-black text-green-600 text-xl">S/ {pagoEnRevision.montoTotal}</span>
-                                        </div>
-                                        {pagoEnRevision.descuento > 0 && (
-                                            <div className="flex justify-between border-b border-blue-200/50 pb-2">
-                                                <span className="text-amber-700 font-medium">Descuento aplicado:</span>
-                                                <span className="font-bold text-amber-700">- S/ {pagoEnRevision.descuento}</span>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-between border-b border-blue-200/50 pb-2">
-                                            <span className="text-blue-700 font-medium">Método de Pago:</span>
-                                            <span className="font-bold bg-white px-3 py-1 rounded-md text-blue-800 border border-blue-100">{pagoEnRevision.metodo}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-blue-200/50 pb-2">
-                                            <span className="text-blue-700 font-medium">Nro Operación:</span>
-                                            <span className="font-bold text-gray-800">{pagoEnRevision.numeroOperacion || 'N/A'}</span>
-                                        </div>
-                                        <div className="flex justify-between border-b border-blue-200/50 pb-2">
-                                            <span className="text-blue-700 font-medium">Cupos Solicitados:</span>
-                                            <span className="font-black text-blue-900 bg-blue-100 px-3 py-1 rounded-md">{pagoEnRevision._count.estudiantes} alumnos</span>
-                                        </div>
-
-                                        {pagoEnRevision.cajero && (
-                                            <div className="flex justify-between pt-2">
-                                                <span className="text-purple-700 font-medium">Aprobado Por:</span>
-                                                <span className="font-bold text-purple-900 bg-purple-100 px-3 py-1 rounded-md flex items-center">
-                                                    <UserCheck className="w-3 h-3 mr-1" />
-                                                    {pagoEnRevision.cajero.name}
-                                                </span>
-                                            </div>
-                                        )}
+                                    <div>
+                                        <p className="text-xs text-blue-600 font-bold uppercase mb-1">Cupos Solicitados</p>
+                                        <p className="text-xl font-bold text-blue-900">{pagoEnRevision._count.estudiantes} Alumnos</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-blue-600 font-bold uppercase mb-1">Descuento / Cupón</p>
+                                        <p className="text-xl font-bold text-amber-600">{pagoEnRevision.descuento > 0 ? `- S/ ${pagoEnRevision.descuento}` : 'S/ 0.00'}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-blue-600 font-bold uppercase mb-1">Total Transacciones</p>
+                                        <p className="text-xl font-bold text-gray-800">
+                                            {pagoEnRevision.detalles?.length > 0 ? pagoEnRevision.detalles.length : 1}
+                                        </p>
                                     </div>
                                 </div>
+                            </div>
 
+                            <h4 className="font-black text-gray-700 mb-4 uppercase text-sm border-b pb-2">Desglose de Comprobantes</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                                {/* LÓGICA INTELIGENTE: Si tiene detalles (nuevo), los mapea. Si no (antiguo), crea un array falso con los datos principales */}
+                                {(() => {
+                                    const listaADibujar = pagoEnRevision.detalles && pagoEnRevision.detalles.length > 0
+                                        ? pagoEnRevision.detalles
+                                        : [{
+                                            id: 'pago-antiguo',
+                                            monto: pagoEnRevision.montoTotal,
+                                            metodo: pagoEnRevision.metodo || 'N/A',
+                                            numeroOperacion: pagoEnRevision.numeroOperacion,
+                                            comprobanteUrl: pagoEnRevision.comprobanteUrl,
+                                            fechaHoraPago: pagoEnRevision.createdAt
+                                        }];
+
+                                    return listaADibujar.map((detalle: any, i: number) => (
+                                        <div key={detalle.id} className="bg-white border rounded-xl shadow-sm overflow-hidden flex flex-col">
+                                            <div className="p-4 border-b bg-gray-50 relative">
+                                                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                                                <p className="text-xs text-gray-500 flex justify-between mb-1">
+                                                    <span className="font-bold">Pago #{i + 1}</span>
+                                                    <span>{new Date(detalle.fechaHoraPago).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                                                </p>
+                                                <div className="flex justify-between items-end">
+                                                    <div>
+                                                        <p className="text-lg font-black text-gray-800">S/ {detalle.monto.toFixed(2)}</p>
+                                                        <p className="text-[10px] font-bold text-white bg-gray-700 px-2 py-0.5 rounded inline-block uppercase mt-1">{detalle.metodo}</p>
+                                                    </div>
+                                                    {detalle.numeroOperacion && (
+                                                        <div className="text-right">
+                                                            <p className="text-[10px] font-bold text-gray-400 uppercase">Nro. Operación</p>
+                                                            <p className="text-sm font-bold text-blue-600">{detalle.numeroOperacion}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="p-4 flex-1 flex flex-col justify-center items-center bg-white min-h-[150px]">
+                                                {detalle.comprobanteUrl ? (
+                                                    <div className="w-full">
+                                                        <a href={detalle.comprobanteUrl} target="_blank" rel="noreferrer" className="block relative group overflow-hidden rounded-lg border border-gray-200">
+                                                            <img src={detalle.comprobanteUrl} alt={`Voucher ${i + 1}`} className="w-full h-32 object-cover group-hover:scale-105 transition-transform" />
+                                                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                <ExternalLink className="text-white w-6 h-6" />
+                                                            </div>
+                                                        </a>
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-gray-400 flex flex-col items-center">
+                                                        <ImageIcon className="w-8 h-8 mb-2 opacity-50" />
+                                                        <span className="text-xs font-bold uppercase">Sin Imagen</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
+
+                            <div className="border-t pt-6">
                                 {pagoEnRevision.estado === 'PENDIENTE' ? (
-                                    <div className="space-y-3 bg-white p-5 rounded-2xl border border-gray-100 shadow-sm">
-                                        <p className="text-sm font-black text-gray-800">Acción de Tesorería:</p>
+                                    <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm max-w-xl mx-auto">
+                                        <p className="text-sm font-black text-gray-800 mb-4 text-center">Acción de Tesorería General:</p>
                                         <div className="grid grid-cols-2 gap-4">
                                             <button onClick={() => procesar(pagoEnRevision.id, 'RECHAZADO')} disabled={loading} className="flex items-center justify-center space-x-2 bg-red-50 text-red-600 p-4 rounded-xl border border-red-200 hover:bg-red-600 hover:text-white transition-all disabled:opacity-50">
-                                                <X className="w-5 h-5" /> <span className="font-bold">Rechazar</span>
+                                                <X className="w-5 h-5" /> <span className="font-bold">Rechazar Todo</span>
                                             </button>
                                             <button onClick={() => procesar(pagoEnRevision.id, 'APROBADO')} disabled={loading} className="flex items-center justify-center space-x-2 bg-green-500 text-white p-4 rounded-xl border border-green-600 hover:bg-green-600 transition-all shadow-md disabled:opacity-50">
-                                                <Check className="w-5 h-5" /> <span className="font-bold">Aprobar</span>
+                                                <CheckCircle className="w-5 h-5" /> <span className="font-bold">Aprobar Todo</span>
                                             </button>
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="bg-gray-50 p-5 rounded-2xl border border-gray-200 text-center shadow-sm">
-                                        <p className="text-gray-600 font-bold flex flex-col items-center justify-center mb-4">
-                                            <span className="text-2xl mb-2">{pagoEnRevision.estado === 'APROBADO' ? '✅' : '❌'}</span>
-                                            Este comprobante ya fue procesado.
+                                    <div className="bg-gray-100 p-5 rounded-xl border border-gray-200 text-center shadow-inner max-w-xl mx-auto">
+                                        <p className="text-gray-600 font-bold flex items-center justify-center">
+                                            <span className="text-2xl mr-3">{pagoEnRevision.estado === 'APROBADO' ? '✅' : '❌'}</span>
+                                            Este Ticket Maestro ya fue procesado y su estado es {pagoEnRevision.estado}.
                                         </p>
                                     </div>
                                 )}
                             </div>
+
                         </div>
                     </div>
                 </div>
