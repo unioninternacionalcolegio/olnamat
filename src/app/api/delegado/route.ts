@@ -14,7 +14,9 @@ export async function POST(req: Request) {
         }
 
         const body = await req.json()
-        const { alumnos, pagoInfo } = body
+
+        // Extraemos 'pagosParciales' por si ya actualizaste el front, sino usamos 'pagoInfo'
+        const { alumnos, pagoInfo, pagosParciales } = body
 
         // Buscamos al usuario completo para obtener sus datos por defecto (localidad, tipoColegio, etc.)
         const usuarioActual = await prisma.user.findUnique({
@@ -24,15 +26,36 @@ export async function POST(req: Request) {
         // Iniciamos la transacción para que si algo falla, no se guarde ni el pago ni los alumnos
         const resultado = await prisma.$transaction(async (tx) => {
 
+            // Preparamos los detalles del pago dependiendo de qué nos mandó el Frontend
+            const detallesParaInsertar = pagosParciales && pagosParciales.length > 0
+                ? pagosParciales.map((p: any) => ({
+                    metodo: p.metodo,
+                    monto: Number(p.monto),
+                    numeroOperacion: p.numeroOperacion || null,
+                    comprobanteUrl: p.comprobanteUrl || null,
+                    fechaHoraPago: p.fechaHoraPago ? new Date(p.fechaHoraPago) : new Date()
+                }))
+                : [
+                    {
+                        metodo: pagoInfo.metodo,
+                        monto: Number(pagoInfo.montoTotal),
+                        numeroOperacion: pagoInfo.numeroOperacion || null,
+                        comprobanteUrl: pagoInfo.comprobanteUrl || null,
+                        fechaHoraPago: new Date()
+                    }
+                ];
+
             // 1. Crear el Registro de Pago
             const nuevoPago = await tx.pago.create({
                 data: {
                     montoTotal: Number(pagoInfo.montoTotal),
-                    metodo: pagoInfo.metodo,
-                    numeroOperacion: pagoInfo.numeroOperacion,
-                    comprobanteUrl: pagoInfo.comprobanteUrl,
                     estado: EstadoPago.PENDIENTE,
                     clienteId: session.user.id,
+
+                    // Aquí mandamos el array de pagos directamente a la nueva tabla DetallePago
+                    detalles: {
+                        create: detallesParaInsertar
+                    }
                 }
             })
 

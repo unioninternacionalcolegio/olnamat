@@ -17,11 +17,11 @@ export default async function MisPagosPage() {
         include: {
             _count: {
                 select: { estudiantes: true }
-            }
+            },
+            detalles: true // <--- ¡AQUÍ ESTÁ LA MAGIA!
         },
         orderBy: { createdAt: 'desc' }
     })
-
     return (
         <div className="space-y-6">
             <div>
@@ -60,7 +60,12 @@ export default async function MisPagosPage() {
                                     </td>
                                     <td className="p-4">
                                         <p className="font-bold text-blue-600">S/ {pago.montoTotal.toFixed(2)}</p>
-                                        <p className="text-[10px] text-gray-500 uppercase">{pago.metodo} - OP: {pago.numeroOperacion}</p>
+                                        <p className="text-[10px] text-gray-500 uppercase">
+                                            {pago.detalles && pago.detalles.length > 1
+                                                ? "PAGO MÚLTIPLE"
+                                                : `${pago.detalles?.[0]?.metodo || 'N/A'} - OP: ${pago.detalles?.[0]?.numeroOperacion || 'S/N'}`
+                                            }
+                                        </p>
                                     </td>
                                     <td className="p-4 text-center font-bold text-gray-600">
                                         {pago._count.estudiantes}
@@ -83,18 +88,46 @@ export default async function MisPagosPage() {
                                         )}
                                     </td>
                                     <td className="p-4 text-center">
-                                        {pago.comprobanteUrl ? (
-                                            <a
-                                                href={pago.comprobanteUrl}
-                                                target="_blank"
-                                                className="inline-flex items-center justify-center p-2 bg-gray-100 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
-                                                title="Ver foto del voucher"
-                                            >
-                                                <Receipt className="w-4 h-4" />
-                                            </a>
-                                        ) : (
-                                            <span className="text-xs text-gray-400">Presencial</span>
-                                        )}
+                                        <div className="flex justify-center gap-1">
+                                            {/* NUEVO MODO: Recorremos los detalles y mostramos un ícono por cada voucher */}
+                                            {pago.detalles && pago.detalles.length > 0 ? (
+                                                <>
+                                                    {pago.detalles.map((detalle: any, index: number) =>
+                                                        detalle.comprobanteUrl ? (
+                                                            <a
+                                                                key={detalle.id || index}
+                                                                href={detalle.comprobanteUrl}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                className="inline-flex items-center justify-center p-2 bg-gray-100 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                                                                title={`Ver foto del voucher ${index + 1}`}
+                                                            >
+                                                                <Receipt className="w-4 h-4" />
+                                                            </a>
+                                                        ) : null
+                                                    )}
+                                                    {/* Si tiene detalles pero NINGUNO tiene imagen (Ej: Todo fue en efectivo) */}
+                                                    {pago.detalles.every((d: any) => !d.comprobanteUrl) && (
+                                                        <span className="text-xs text-gray-400">Presencial</span>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                /* MODO ANTIGUO: Retrocompatibilidad ignorando el tipado estricto de Prisma */
+                                                (pago as any).comprobanteUrl ? (
+                                                    <a
+                                                        href={(pago as any).comprobanteUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="inline-flex items-center justify-center p-2 bg-gray-100 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors"
+                                                        title="Ver foto del voucher"
+                                                    >
+                                                        <Receipt className="w-4 h-4" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400">Presencial</span>
+                                                )
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))

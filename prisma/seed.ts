@@ -119,11 +119,21 @@ async function main() {
     const pagoDelegado = await prisma.pago.create({
         data: {
             montoTotal: 150,
-            metodo: MetodoPago.TRANSFERENCIA,
-            numeroOperacion: '999888777',
             estado: EstadoPago.APROBADO,
             clienteId: delegado.id,
-            tipoComprobante: TipoComprobante.TICKET_INTERNO
+            // ... otros campos como tipoComprobante, etc.
+
+            // ¡ASÍ SE GUARDA AHORA!
+            detalles: {
+                create: [
+                    {
+                        metodo: MetodoPago.TRANSFERENCIA,
+                        monto: 150,
+                        numeroOperacion: '999888777',
+                        fechaHoraPago: new Date()
+                    }
+                ]
+            }
         }
     })
 
@@ -183,17 +193,6 @@ async function main() {
             }
         })
 
-        const pagoLibre = await prisma.pago.create({
-            data: {
-                montoTotal: 15,
-                metodo: MetodoPago.YAPE,
-                numeroOperacion: `YAPE-00${i}`,
-                estado: EstadoPago.APROBADO,
-                clienteId: libre.id,
-                tipoComprobante: TipoComprobante.BOLETA
-            }
-        })
-
         await prisma.estudiante.create({
             data: {
                 dni: `8000000${i}`,
@@ -206,7 +205,6 @@ async function main() {
                 localidad: libre.localidad || '',
                 estadoRegistro: EstadoRegistro.COMPLETO,
                 creadorId: libre.id,
-                pagoId: pagoLibre.id
             }
         })
     }

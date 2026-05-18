@@ -21,22 +21,30 @@ export async function POST(req: Request) {
         if (finalDni.length !== 8 || !/^\d{8}$/.test(finalDni)) {
             return NextResponse.json({ error: "El DNI ingresado no es válido. Debe tener exactamente 8 números." }, { status: 400 })
         }
+
         // 2A. Verificar que el DNI no esté registrado como Usuario
         const userExists = await prisma.user.findUnique({ where: { dni: finalDni } })
         if (userExists) {
             return NextResponse.json({ error: "Este DNI ya tiene una cuenta registrada en el sistema." }, { status: 400 })
         }
 
-        // 2B. Verificar que el DNI no esté registrado como Estudiante (AQUÍ ESTABA EL ERROR)
+        // 2B. Verificar que el DNI no esté registrado como Estudiante
         const estudianteExists = await prisma.estudiante.findUnique({ where: { dni: finalDni } })
         if (estudianteExists) {
             return NextResponse.json({ error: "Este DNI ya se encuentra inscrito como estudiante en el concurso." }, { status: 400 })
         }
 
         // 3. Verificar que el Número de Operación sea ÚNICO (si el usuario lo ingresó)
+        // CORRECCIÓN: Buscamos dentro de la nueva tabla Detalles
         if (numeroOperacion && numeroOperacion.trim() !== "") {
             const operacionExists = await prisma.pago.findFirst({
-                where: { numeroOperacion: numeroOperacion.trim() }
+                where: {
+                    detalles: {
+                        some: {
+                            numeroOperacion: numeroOperacion.trim()
+                        }
+                    }
+                }
             })
             if (operacionExists) {
                 return NextResponse.json({ error: "Este número de operación ya fue usado. Verifica tu comprobante." }, { status: 400 })
@@ -71,17 +79,25 @@ export async function POST(req: Request) {
                 }
             })
 
-            // Crear el Pago en estado PENDIENTE usando la fecha y hora unidas
+            // Crear el Pago en estado PENDIENTE
+            // CORRECCIÓN: Usando la nueva relación de detalles
             const nuevoPago = await tx.pago.create({
                 data: {
                     montoTotal,
-                    metodo: MetodoPago.YAPE, // Asumimos método digital por subir voucher
-                    numeroOperacion: numeroOperacion ? numeroOperacion.trim() : null,
-                    fechaHoraPago: fechaHoraCompleta,
-                    comprobanteUrl,
                     estado: EstadoPago.PENDIENTE,
                     tipoComprobante: TipoComprobante.TICKET_INTERNO,
                     clienteId: newUser.id,
+                    detalles: {
+                        create: [
+                            {
+                                metodo: MetodoPago.YAPE, // Asumimos digital por subir voucher
+                                monto: montoTotal,
+                                numeroOperacion: numeroOperacion ? numeroOperacion.trim() : null,
+                                fechaHoraPago: fechaHoraCompleta,
+                                comprobanteUrl: comprobanteUrl || null
+                            }
+                        ]
+                    }
                 }
             })
 
