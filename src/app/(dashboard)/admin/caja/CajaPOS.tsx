@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Printer, Trash2, Tag, Search, Building2 } from "lucide-react"
+import { Printer, Trash2, Tag, Search, Building2, Plus, ChevronDown, ChevronUp } from "lucide-react"
 
 type Cliente = {
     id: string,
@@ -27,23 +27,42 @@ type ItemCarrito = {
     estudianteApellidos?: string
 }
 
+// AÑADIDO: Fecha y hora individuales por cada método de pago
+type PagoParcial = {
+    metodo: string,
+    monto: number,
+    numeroOperacion: string,
+    fecha: string,
+    hora: string
+}
+
 export default function CajaPOS({
-    clientes: clientesIniciales,
-    configuraciones,
-    cajeroId
+    clientes = [],
+    configuraciones = [],
+    cajeroId = ""
 }: {
-    clientes: Cliente[],
-    configuraciones: any[],
-    cajeroId: string
+    clientes?: Cliente[],
+    configuraciones?: any[],
+    cajeroId?: string
 }) {
     const router = useRouter()
-    const [clientes, setClientes] = useState<Cliente[]>(clientesIniciales)
-    const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState("")
-    const [metodoPago, setMetodoPago] = useState("EFECTIVO")
+    
+    const safeConfiguraciones = Array.isArray(configuraciones) ? configuraciones : []
+    const safeClientes = Array.isArray(clientes) ? clientes : []
 
-    const [numeroOperacion, setNumeroOperacion] = useState("")
-    const [fechaPago, setFechaPago] = useState(new Date().toISOString().split('T')[0])
-    const [horaPago, setHoraPago] = useState(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))
+    const [clientesList, setClientesList] = useState<Cliente[]>(safeClientes)
+    const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState("")
+    
+    // AÑADIDO: Inicializamos con la fecha y hora actuales
+    const [pagosParciales, setPagosParciales] = useState<PagoParcial[]>([
+        { 
+            metodo: "EFECTIVO", 
+            monto: 0, 
+            numeroOperacion: "",
+            fecha: new Date().toISOString().split('T')[0],
+            hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        }
+    ])
 
     const [carrito, setCarrito] = useState<ItemCarrito[]>([])
     const [loading, setLoading] = useState(false)
@@ -53,27 +72,27 @@ export default function CajaPOS({
     const [faseVentaActiva, setFaseVentaActiva] = useState<"REGULAR" | "EXTEMPORANEO">("REGULAR")
 
     const [mostrarRegistroRapido, setMostrarRegistroRapido] = useState(false)
+    const [mostrarCuposRapidos, setMostrarCuposRapidos] = useState(false) 
 
     const [descuentoManual, setDescuentoManual] = useState<number>(0)
 
-    // AÑADIDO: celular en el estado inicial
     const [nuevoLibre, setNuevoLibre] = useState({
         dni: "", nombres: "", apellidos: "", institucion: "", celular: "",
         nivel: "PRIMARIA", gradoOEdad: ""
     })
 
     const gradosDisponibles = useMemo(() => {
-        return configuraciones
-            .filter(c => c.nivel === nuevoLibre.nivel)
+        return safeConfiguraciones
+            .filter(c => c && c.nivel === nuevoLibre.nivel)
             .map(c => c.gradoOEdad)
-    }, [configuraciones, nuevoLibre.nivel])
+    }, [safeConfiguraciones, nuevoLibre.nivel])
 
-    const delegados = useMemo(() => clientes.filter(c => c.role === 'DELEGADO'), [clientes])
+    const delegados = useMemo(() => safeClientes.filter(c => c && c.role === 'DELEGADO'), [safeClientes])
 
     const colegiosUnicos = useMemo(() => {
         const set = new Set<string>()
-        clientes.forEach(c => {
-            if (c.institucion && c.institucion.trim() !== "" && c.institucion.toUpperCase() !== "ALUMNO LIBRE") {
+        clientesList.forEach(c => {
+            if (c && c.institucion && c.institucion.trim() !== "" && c.institucion.toUpperCase() !== "ALUMNO LIBRE") {
                 let instLimpia = c.institucion.toUpperCase();
                 if (instLimpia.startsWith("LIBRE-")) {
                     instLimpia = instLimpia.replace("LIBRE-", "").trim();
@@ -82,7 +101,7 @@ export default function CajaPOS({
             }
         })
         return Array.from(set).sort()
-    }, [clientes])
+    }, [clientesList])
 
     const [busquedaDelegado, setBusquedaDelegado] = useState("")
     const [mostrarOpcionesDelegado, setMostrarOpcionesDelegado] = useState(false)
@@ -98,15 +117,15 @@ export default function CajaPOS({
     }, [gradosDisponibles, nuevoLibre.gradoOEdad])
 
     const clienteActual = useMemo(() =>
-        clientes.find(c => c.id === clienteSeleccionadoId),
-        [clienteSeleccionadoId, clientes])
+        clientesList.find(c => c.id === clienteSeleccionadoId),
+        [clienteSeleccionadoId, clientesList])
 
     const eliminarItem = (id: string) => {
         setCarrito(prev => prev.filter(item => item.id !== id))
     }
 
     const calcularPrecio = (nivel: string, grado: string, tipoCol: string) => {
-        const config = configuraciones.find(c => c.nivel === nivel && c.gradoOEdad === grado)
+        const config = safeConfiguraciones.find(c => c.nivel === nivel && c.gradoOEdad === grado)
         if (!config) return { monto: 0, fase: faseVentaActiva }
 
         let monto = 0
@@ -128,7 +147,7 @@ export default function CajaPOS({
         grado: string,
         datosEstudiante?: { dni: string, nombres: string, apellidos: string }
     ) => {
-        if (!clienteActual && !datosEstudiante) return alert("Selecciona un delegado/cliente primero.")
+        if (!clienteActual && !datosEstudiante && !clienteSeleccionadoId) return alert("Selecciona un delegado/cliente primero.")
 
         const { monto, fase } = calcularPrecio(nivel, grado, tipoColegioActivo)
         const idItem = `${nivel}-${grado}-${tipoColegioActivo}-${fase}`
@@ -176,7 +195,7 @@ export default function CajaPOS({
         let dniFinal = nuevoLibre.dni.trim()
 
         if (!dniFinal) {
-            const currentL = clientes
+            const currentL = clientesList
                 .filter(c => c.dni?.startsWith('L'))
                 .map(c => parseInt(c.dni!.replace('L', '')))
                 .filter(n => !isNaN(n));
@@ -199,7 +218,7 @@ export default function CajaPOS({
                     nombres: nuevoLibre.nombres,
                     apellidos: nuevoLibre.apellidos,
                     institucion: instFinal,
-                    celular: nuevoLibre.celular, // AÑADIDO: Se envía al backend
+                    celular: nuevoLibre.celular,
                     nivel: nuevoLibre.nivel,
                     gradoOEdad: nuevoLibre.gradoOEdad,
                     role: "LIBRE",
@@ -216,12 +235,15 @@ export default function CajaPOS({
                 institucion: instFinal,
                 tipoColegio: tipoColegioActivo,
                 role: "LIBRE",
-                celular: nuevoLibre.celular // Actualizamos el estado local
+                celular: nuevoLibre.celular 
             }
 
-            setClientes([...clientes, nuevoUser])
-            setClienteSeleccionadoId(data.user.id)
-            setBusquedaDelegado(`${nuevoUser.name} (${nuevoUser.dni})`)
+            setClientesList([...clientesList, nuevoUser])
+            
+            if (!clienteSeleccionadoId) {
+                setClienteSeleccionadoId(data.user.id)
+                setBusquedaDelegado(`${nuevoUser.name} (${nuevoUser.dni})`)
+            }
 
             agregarAlCarrito(nuevoLibre.nivel, nuevoLibre.gradoOEdad, {
                 dni: data.user.dni,
@@ -229,9 +251,9 @@ export default function CajaPOS({
                 apellidos: nuevoLibre.apellidos
             })
 
-            setMostrarRegistroRapido(false)
-            // AÑADIDO: Limpiamos celular
-            setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "", institucion: "", celular: "" })
+            setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "" })
+            alert(`Estudiante ${nuevoLibre.nombres} agregado al carrito. Puedes registrar otro si deseas.`)
+            
         } catch (error: any) {
             alert(error.message)
         } finally {
@@ -261,12 +283,41 @@ export default function CajaPOS({
     const subtotal = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
     const total = Math.max(0, subtotal - (descuentoManual || 0))
 
+    useEffect(() => {
+        if (pagosParciales.length === 1) {
+            setPagosParciales([{ ...pagosParciales[0], monto: total }])
+        }
+    }, [total])
+
+    const totalPagos = pagosParciales.reduce((sum, pago) => sum + Number(pago.monto), 0)
+    const saldoRestante = total - totalPagos
+
+    const actualizarPagoParcial = (index: number, campo: keyof PagoParcial, valor: string | number) => {
+        const nuevos = [...pagosParciales]
+        nuevos[index] = { ...nuevos[index], [campo]: valor }
+        setPagosParciales(nuevos)
+    }
+
     const procesarVenta = async () => {
         if (!clienteSeleccionadoId || carrito.length === 0) return alert("Venta vacía")
 
-        if (metodoPago !== "EFECTIVO" && !numeroOperacion.trim()) {
-            return alert(`El N° de Operación es obligatorio para ${metodoPago}.`);
+        if (Math.abs(totalPagos - total) > 0.01) {
+            return alert(`Los pagos parciales (S/ ${totalPagos.toFixed(2)}) no coinciden con el total (S/ ${total.toFixed(2)}).`)
         }
+
+        for (const p of pagosParciales) {
+            if (p.metodo !== "EFECTIVO" && !p.numeroOperacion.trim()) {
+                return alert(`El N° de Operación es obligatorio para ${p.metodo}.`)
+            }
+        }
+
+        // AÑADIDO: Preparamos los pagos parciales enviando el string "fechaHoraPago" para la API
+        const pagosFormateados = pagosParciales.map(p => ({
+            metodo: p.metodo,
+            monto: p.monto,
+            numeroOperacion: p.numeroOperacion,
+            fechaHoraPago: `${p.fecha}T${p.hora}` // La API en route.ts ya espera este formato
+        }))
 
         setLoading(true)
         try {
@@ -277,13 +328,10 @@ export default function CajaPOS({
                     cajeroId,
                     clienteId: clienteSeleccionadoId,
                     items: carrito,
-                    metodoPago,
+                    pagosParciales: pagosFormateados, 
                     montoTotal: total,
                     descuento: descuentoManual,
-                    subtotal: subtotal,
-                    numeroOperacion: numeroOperacion.trim(),
-                    fechaPago,
-                    horaPago
+                    subtotal: subtotal
                 })
             })
             const data = await res.json()
@@ -292,7 +340,13 @@ export default function CajaPOS({
             setTicketVendido(data.ticket)
             setCarrito([])
             setDescuentoManual(0)
-            setNumeroOperacion("")
+            setPagosParciales([{ 
+                metodo: "EFECTIVO", 
+                monto: 0, 
+                numeroOperacion: "",
+                fecha: new Date().toISOString().split('T')[0],
+                hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+            }])
             setBusquedaDelegado("")
         } catch (error: any) {
             alert(`Error al cobrar: ${error.message}`)
@@ -319,43 +373,32 @@ export default function CajaPOS({
                                 <div key={idx} className="border-b pb-2 mb-2 last:border-0 border-gray-200">
                                     <div className="flex justify-between">
                                         <span className="text-sm font-bold text-gray-500">Método de Pago:</span>
-                                        <span className="text-sm font-black text-gray-800">{d.metodo}</span>
+                                        <div className="flex gap-4">
+                                            <span className="text-sm font-black text-gray-800">{d.metodo}</span>
+                                            <span className="text-sm font-black text-green-600">S/ {Number(d.monto).toFixed(2)}</span>
+                                        </div>
                                     </div>
                                     {d.metodo !== "EFECTIVO" && (
-                                        <div className="flex justify-between">
-                                            <span className="text-sm font-bold text-gray-500">N° Operación:</span>
-                                            <span className="text-sm font-black text-gray-800">{d.numeroOperacion || "No registrado"}</span>
-                                        </div>
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-bold text-gray-500">N° Operación:</span>
+                                                <span className="text-sm font-black text-gray-800">{d.numeroOperacion || "No registrado"}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-sm font-bold text-gray-500">Fecha de Depósito:</span>
+                                                <span className="text-sm font-black text-gray-800">
+                                                    {d.fechaHoraPago ? new Date(d.fechaHoraPago).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' }) : "No registrado"}
+                                                </span>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             ))
-                        ) : (
-                            <>
-                                <div className="flex justify-between border-b pb-1 border-gray-200">
-                                    <span className="text-sm font-bold text-gray-500">Método de Pago:</span>
-                                    <span className="text-sm font-black text-gray-800">{ticketVendido.metodo || "N/A"}</span>
-                                </div>
-                                {ticketVendido.metodo !== "EFECTIVO" && (
-                                    <div className="flex justify-between border-b pb-1 border-gray-200">
-                                        <span className="text-sm font-bold text-gray-500">N° Operación:</span>
-                                        <span className="text-sm font-black text-gray-800">{ticketVendido.numeroOperacion || "No registrado"}</span>
-                                    </div>
-                                )}
-                            </>
-                        )}
+                        ) : null}
 
                         <div className="flex justify-between border-b pb-1 border-gray-200 mt-2">
                             <span className="text-sm font-bold text-gray-500">Total Pagado:</span>
                             <span className="text-sm font-black text-green-600">S/ {Number(ticketVendido.montoTotal).toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span className="text-sm font-bold text-gray-500">Fecha y Hora:</span>
-                            <span className="text-sm font-black text-gray-800">
-                                {new Date(ticketVendido.createdAt).toLocaleString('es-PE', {
-                                    dateStyle: 'short',
-                                    timeStyle: 'short'
-                                })}
-                            </span>
                         </div>
                     </div>
                 </div>
@@ -419,18 +462,17 @@ export default function CajaPOS({
                                     setBusquedaDelegado("")
                                 }
                             }}
-                            className="text-[10px] font-black text-blue-600 bg-blue-50 px-3 py-2 rounded-lg"
+                            className={`text-[10px] font-black px-3 py-2 rounded-lg transition-colors ${mostrarRegistroRapido ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"}`}
                         >
-                            {mostrarRegistroRapido ? "CANCELAR" : "+ REGISTRO RÁPIDO (ALUMNO)"}
+                            {mostrarRegistroRapido ? "X CERRAR PANEL REGISTRO" : "+ REGISTRO RÁPIDO"}
                         </button>
                     </div>
 
                     {mostrarRegistroRapido ? (
                         <div className="space-y-4 bg-gray-50 p-6 rounded-3xl border-2 border-dashed border-gray-200">
                             <p className="text-xs text-gray-500 font-bold mb-2">
-                                Si dejas el DNI vacío, se generará uno automático (Ej. L0001).
+                                Si el padre pagará por varios hijos, llena los datos de uno y dale a "Agregar". Luego cambia los nombres para el siguiente y dale a "Agregar" nuevamente. Saldrán en un solo ticket.
                             </p>
-                            {/* AÑADIDO: md:grid-cols-4 para dar espacio al nuevo input de Celular */}
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <input
@@ -449,9 +491,8 @@ export default function CajaPOS({
                                 <input placeholder="NOMBRES" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.nombres} onChange={(e) => setNuevoLibre({ ...nuevoLibre, nombres: e.target.value })} />
                                 <input placeholder="APELLIDOS" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.apellidos} onChange={(e) => setNuevoLibre({ ...nuevoLibre, apellidos: e.target.value })} />
 
-                                {/* AÑADIDO: Input de Celular */}
                                 <input
-                                    placeholder="CELULAR"
+                                    placeholder="CELULAR (Opcional)"
                                     className="p-3 border rounded-xl font-bold"
                                     type="tel"
                                     maxLength={9}
@@ -503,10 +544,10 @@ export default function CajaPOS({
                             </div>
                             <button
                                 onClick={registrarYSeleccionar}
-                                disabled={errorDniLibre || !nuevoLibre.nombres || !nuevoLibre.gradoOEdad || !nuevoLibre.institucion.trim()}
-                                className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-sm shadow-lg disabled:bg-gray-400 disabled:shadow-none"
+                                disabled={errorDniLibre || !nuevoLibre.nombres || !nuevoLibre.gradoOEdad || !nuevoLibre.institucion.trim() || loading}
+                                className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-sm shadow-lg disabled:bg-gray-400 disabled:shadow-none hover:bg-blue-700"
                             >
-                                Registrar y Auto-Agregar al Carrito
+                                <Plus className="w-5 h-5" /> Agregar Estudiante al Carrito
                             </button>
                         </div>
                     ) : (
@@ -556,29 +597,38 @@ export default function CajaPOS({
                 </div>
 
                 {!mostrarRegistroRapido && (
-                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6">
-                        <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b pb-2">Agregar Cupos Rápidos</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            {["INICIAL", "PRIMARIA", "SECUNDARIA"].map((nivel) => (
-                                <div key={nivel} className="space-y-2">
-                                    <h4 className="text-[10px] font-black text-blue-500 uppercase">{nivel}</h4>
-                                    <div className="flex flex-col gap-1">
-                                        {configuraciones.filter(c => c.nivel === nivel).map((c) => (
-                                            <button key={c.id} onClick={() => agregarAlCarrito(nivel, c.gradoOEdad)} className="text-left px-4 py-2 bg-gray-50 hover:bg-blue-600 hover:text-white rounded-xl text-[11px] font-bold transition-all border border-transparent hover:border-blue-600 flex justify-between">
-                                                <span>+ {c.gradoOEdad}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
+                    <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-4 transition-all">
+                        <div className="flex justify-between items-center cursor-pointer border-b pb-2 border-gray-100" onClick={() => setMostrarCuposRapidos(!mostrarCuposRapidos)}>
+                            <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Cupos Rápidos (Cantidades libres)</h3>
+                            {mostrarCuposRapidos ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
+                        
+                        {mostrarCuposRapidos && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                                {["INICIAL", "PRIMARIA", "SECUNDARIA"].map((nivel) => (
+                                    <div key={nivel} className="space-y-2">
+                                        <h4 className="text-[10px] font-black text-blue-500 uppercase">{nivel}</h4>
+                                        <div className="flex flex-col gap-1">
+                                            {safeConfiguraciones.filter(c => c && c.nivel === nivel).map((c) => (
+                                                <button key={c.id} onClick={() => agregarAlCarrito(nivel, c.gradoOEdad)} className="text-left px-4 py-2 bg-gray-50 hover:bg-blue-600 hover:text-white rounded-xl text-[11px] font-bold transition-all border border-transparent hover:border-blue-600 flex justify-between">
+                                                    <span>+ {c.gradoOEdad}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
             </div>
 
             <div className="bg-white flex flex-col h-[750px] rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden sticky top-6">
-                <div className="p-6 bg-gray-500 text-white flex justify-between items-center font-black text-sm uppercase">Carrito Detalle</div>
+                <div className="p-6 bg-gray-500 text-white flex justify-between items-center font-black text-sm uppercase">
+                    <span>Carrito Detalle</span>
+                    {clienteSeleccionadoId && <span className="text-[10px] bg-gray-600 px-2 py-1 rounded">Titular Asignado</span>}
+                </div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {carrito.map(item => (
                         <div key={item.id} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-2xl border border-gray-100">
@@ -615,24 +665,87 @@ export default function CajaPOS({
                     {carrito.length === 0 && <div className="text-center text-gray-400 text-xs py-10 font-bold">CARRITO VACÍO</div>}
                 </div>
 
-                <div className="p-8 bg-gray-700 text-white space-y-4">
-                    <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full p-3 bg-gray-200 border border-gray-900 rounded-xl text-xs font-bold">
-                        <option value="EFECTIVO">💵 EFECTIVO</option>
-                        <option value="YAPE">📱 YAPE / PLIN</option>
-                        <option value="TRANSFERENCIA">🏦 TRANSFERENCIA</option>
-                    </select>
-
-                    {metodoPago !== "EFECTIVO" && (
-                        <div className="space-y-2">
-                            <input placeholder="N° Operación (Obligatorio)" className="w-full p-2 bg-gray-200 border border-gray-700 rounded-xl text-[15px] font-bold text-white placeholder-gray-500" value={numeroOperacion} onChange={(e) => setNumeroOperacion(e.target.value)} />
-                            <div className="flex gap-2">
-                                <input type="date" className="w-1/2 p-2 bg-gray-200 border border-gray-700 rounded-xl text-[15px] font-bold" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} />
-                                <input type="time" className="w-1/2 p-2 bg-gray-200 border border-gray-700 rounded-xl text-[15px] font-bold" value={horaPago} onChange={(e) => setHoraPago(e.target.value)} />
-                            </div>
+                <div className="p-8 bg-gray-800 text-white space-y-4">
+                    
+                    <div className="space-y-3 bg-gray-700/50 p-4 rounded-2xl border border-gray-600">
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-black uppercase text-gray-300">Métodos de Pago</span>
+                            {saldoRestante !== 0 && (
+                                <span className={`text-[10px] font-black px-2 py-1 rounded ${saldoRestante > 0 ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>
+                                    {saldoRestante > 0 ? `Falta S/ ${saldoRestante.toFixed(2)}` : `Exceso S/ ${Math.abs(saldoRestante).toFixed(2)}`}
+                                </span>
+                            )}
                         </div>
-                    )}
 
-                    <div className="flex justify-between items-center bg-gray-800 p-3 rounded-xl border border-gray-700">
+                        {pagosParciales.map((pago, index) => (
+                            <div key={index} className="space-y-2 border-b border-gray-600 pb-3 mb-3 last:border-0 last:pb-0 last:mb-0 relative">
+                                <div className="flex gap-2">
+                                    <select value={pago.metodo} onChange={(e) => actualizarPagoParcial(index, 'metodo', e.target.value)} className="flex-1 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white">
+                                        <option value="EFECTIVO">💵 EFECTIVO</option>
+                                        <option value="YAPE">📱 YAPE / PLIN</option>
+                                        <option value="TRANSFERENCIA">🏦 TRANSFERENCIA</option>
+                                    </select>
+                                    <div className="relative w-28">
+                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">S/</span>
+                                        <input 
+                                            type="number" 
+                                            step="0.50"
+                                            value={pago.monto === 0 ? "" : pago.monto} 
+                                            onChange={(e) => actualizarPagoParcial(index, 'monto', Number(e.target.value))} 
+                                            className="w-full pl-6 p-2 bg-gray-600 border border-gray-500 rounded-xl text-xs font-bold text-white" 
+                                        />
+                                    </div>
+                                    {pagosParciales.length > 1 && (
+                                        <button onClick={() => setPagosParciales(pagosParciales.filter((_, i) => i !== index))} className="p-2 bg-red-500/20 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-colors">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {/* AÑADIDO: Campos de N° Operación, Fecha y Hora si no es EFECTIVO */}
+                                {pago.metodo !== "EFECTIVO" && (
+                                    <div className="space-y-2 mt-2">
+                                        <input 
+                                            placeholder="N° Operación (Oblig)" 
+                                            value={pago.numeroOperacion} 
+                                            onChange={(e) => actualizarPagoParcial(index, 'numeroOperacion', e.target.value)} 
+                                            className="w-full p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white placeholder-gray-400" 
+                                        />
+                                        <div className="flex gap-2">
+                                            <input 
+                                                type="date" 
+                                                value={pago.fecha} 
+                                                onChange={(e) => actualizarPagoParcial(index, 'fecha', e.target.value)} 
+                                                className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white" 
+                                            />
+                                            <input 
+                                                type="time" 
+                                                value={pago.hora} 
+                                                onChange={(e) => actualizarPagoParcial(index, 'hora', e.target.value)} 
+                                                className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white" 
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+
+                        <button 
+                            onClick={() => setPagosParciales([...pagosParciales, { 
+                                metodo: "YAPE", 
+                                monto: saldoRestante > 0 ? saldoRestante : 0, 
+                                numeroOperacion: "",
+                                fecha: new Date().toISOString().split('T')[0],
+                                hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+                            }])}
+                            className="w-full text-[10px] font-black uppercase text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 py-2 rounded-lg transition-colors flex items-center justify-center gap-1"
+                            disabled={saldoRestante <= 0}
+                        >
+                            <Plus className="w-3 h-3" /> Añadir otro método
+                        </button>
+                    </div>
+
+                    <div className="flex justify-between items-center bg-gray-900 p-3 rounded-xl border border-gray-700">
                         <div className="flex items-center text-gray-400">
                             <Tag className="w-4 h-4 mr-2" />
                             <span className="text-xs font-bold uppercase">Descuento (S/)</span>
@@ -648,7 +761,7 @@ export default function CajaPOS({
                         />
                     </div>
 
-                    <div className="space-y-1 text-sm border-t border-gray-800 pt-4">
+                    <div className="space-y-1 text-sm border-t border-gray-700 pt-4">
                         <div className="flex justify-between text-gray-400">
                             <span>Subtotal</span>
                             <span>S/ {subtotal.toFixed(2)}</span>
@@ -665,7 +778,13 @@ export default function CajaPOS({
                         </div>
                     </div>
 
-                    <button onClick={procesarVenta} disabled={carrito.length === 0 || !clienteSeleccionadoId || loading} className="w-full bg-blue-600 py-4 rounded-2xl font-black uppercase text-sm shadow-xl shadow-blue-900/50 hover:bg-blue-500 disabled:bg-gray-600 disabled:shadow-none transition-all">Cobrar</button>
+                    <button 
+                        onClick={procesarVenta} 
+                        disabled={carrito.length === 0 || !clienteSeleccionadoId || loading || Math.abs(totalPagos - total) > 0.01} 
+                        className="w-full bg-blue-600 py-4 rounded-2xl font-black uppercase text-sm shadow-xl shadow-blue-900/50 hover:bg-blue-500 disabled:bg-gray-600 disabled:shadow-none transition-all"
+                    >
+                        {loading ? "Procesando..." : "Cobrar"}
+                    </button>
                 </div>
             </div>
         </div>
