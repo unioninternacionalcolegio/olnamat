@@ -1,3 +1,4 @@
+//app/api/caja/ticket/route.ts
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { Nivel, MetodoPago, TipoComprobante, EstadoRegistro, TipoColegio } from "@prisma/client"

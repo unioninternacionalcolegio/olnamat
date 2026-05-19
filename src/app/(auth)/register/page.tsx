@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation"
 export default function RegistroLibrePage() {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
-    const [errorModal, setErrorModal] = useState("") // Estado para el modal de error
+    const [errorModal, setErrorModal] = useState("")
     const [successData, setSuccessData] = useState<{ dni: string } | null>(null)
     const [configuraciones, setConfiguraciones] = useState<any[]>([])
     const [file, setFile] = useState<File | null>(null)
@@ -21,12 +21,12 @@ export default function RegistroLibrePage() {
         localidad: "",
         nivel: "PRIMARIA",
         gradoOEdad: "",
-        numeroOperacion: "",
+        metodoPago: "YAPE", // <--- NUEVO: Por defecto Yape/Plin
+        numeroOperacion: "", // <--- AHORA SERÁ OBLIGATORIO
         fechaPago: "",
         horaPago: ""
     })
 
-    // ==================== FUNCIÓN MEJORADA - FECHA Y HORA DE PERÚ ====================
     const getPeruCurrentDateTime = () => {
         const fecha = new Date().toLocaleDateString('en-CA', {
             timeZone: 'America/Lima'
@@ -42,7 +42,6 @@ export default function RegistroLibrePage() {
         return { fechaPago: fecha, horaPago: hora }
     }
 
-    // 1. Cargar configuraciones al inicio
     useEffect(() => {
         const fetchConfigs = async () => {
             try {
@@ -58,7 +57,6 @@ export default function RegistroLibrePage() {
         fetchConfigs()
     }, [])
 
-    // 2. Extraer grados únicos
     const gradosDisponibles = useMemo(() => {
         return Array.from(new Set(
             configuraciones
@@ -67,7 +65,6 @@ export default function RegistroLibrePage() {
         ))
     }, [configuraciones, formData.nivel])
 
-    // 3. Auto-seleccionar grado
     useEffect(() => {
         if (gradosDisponibles.length > 0) {
             if (!gradosDisponibles.includes(formData.gradoOEdad)) {
@@ -80,17 +77,11 @@ export default function RegistroLibrePage() {
         }
     }, [gradosDisponibles, formData.gradoOEdad])
 
-    // 4. Cargar fecha y hora actual de Perú automáticamente
     useEffect(() => {
         const { fechaPago, horaPago } = getPeruCurrentDateTime()
-        setFormData(prev => ({
-            ...prev,
-            fechaPago,
-            horaPago
-        }))
+        setFormData(prev => ({ ...prev, fechaPago, horaPago }))
     }, [])
 
-    // 5. Calcular el monto en tiempo real
     const configSeleccionada = useMemo(() => {
         return configuraciones.find(c =>
             c.nivel === formData.nivel &&
@@ -121,6 +112,12 @@ export default function RegistroLibrePage() {
             setLoading(false);
             return;
         }
+        // NUEVA VALIDACIÓN: Obligar número de operación
+        if (!formData.numeroOperacion.trim()) {
+            setErrorModal(`Es OBLIGATORIO ingresar el N° de Operación de tu ${formData.metodoPago === 'YAPE' ? 'Yape/Plin' : 'Transferencia'}.`);
+            setLoading(false);
+            return;
+        }
         if (!formData.fechaPago || !formData.horaPago) {
             setErrorModal("Es OBLIGATORIO ingresar la FECHA y la HORA exacta del voucher para la validación.")
             setLoading(false)
@@ -128,7 +125,6 @@ export default function RegistroLibrePage() {
         }
 
         try {
-            // 1. Subir el voucher
             const uploadData = new FormData()
             uploadData.append('file', file)
             const uploadRes = await fetch("/api/upload", {
@@ -138,7 +134,6 @@ export default function RegistroLibrePage() {
             const uploadResult = await uploadRes.json()
             if (!uploadRes.ok) throw new Error(uploadResult.error || "Error al subir el voucher")
 
-            // 2. Enviar datos de registro
             const datosAEnviar = {
                 ...formData,
                 comprobanteUrl: uploadResult.url,
@@ -156,7 +151,6 @@ export default function RegistroLibrePage() {
 
             setSuccessData({ dni: data.estudiante.dni })
         } catch (err: any) {
-            // Aquí se lanza el error al modal
             setErrorModal(err.message)
         } finally {
             setLoading(false)
@@ -191,45 +185,29 @@ export default function RegistroLibrePage() {
     return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 relative">
 
-            {/* MODAL DE ERRORES (DNI DUPLICADO, N° DE OPERACIÓN, ETC) */}
             {errorModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 text-center border-4 border-red-500 relative">
-                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black">
-                            !
-                        </div>
+                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto text-3xl font-black">!</div>
                         <h3 className="text-2xl font-black text-gray-900 uppercase">Aviso</h3>
                         <p className="text-gray-700 font-medium text-lg leading-relaxed">{errorModal}</p>
-                        <button
-                            onClick={() => setErrorModal("")}
-                            className="w-full bg-red-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-red-700 uppercase tracking-widest transition-all mt-4"
-                        >
+                        <button onClick={() => setErrorModal("")} className="w-full bg-red-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-red-700 uppercase tracking-widest transition-all mt-4">
                             Entendido
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* MODAL DE NÚMEROS DE CUENTA */}
             {mostrarCuentas && (
                 <div className="fixed inset-0 z-[40] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-6 relative border-4 border-blue-100">
-                        <button
-                            onClick={() => setMostrarCuentas(false)}
-                            className="absolute -top-3 -right-3 bg-red-500 text-white w-8 h-8 rounded-full font-black text-sm hover:bg-red-600 shadow-lg"
-                        >
-                            X
-                        </button>
+                        <button onClick={() => setMostrarCuentas(false)} className="absolute -top-3 -right-3 bg-red-500 text-white w-8 h-8 rounded-full font-black text-sm hover:bg-red-600 shadow-lg">X</button>
                         <div className="text-center">
                             <h3 className="text-xl font-black text-blue-900 uppercase tracking-wide">Métodos de Pago</h3>
                             <p className="text-sm text-gray-500 font-medium">Realiza tu depósito o transferencia</p>
                         </div>
                         <div className="w-full h-48 bg-gray-100 rounded-2xl flex items-center justify-center border-2 border-dashed border-gray-300 overflow-hidden">
-                            <img
-                                src="/yape-plin.jpg"
-                                alt="Yape Plin"
-                                className="w-50 h-50 object-cover"
-                            />
+                            <img src="/yape-plin.jpg" alt="Yape Plin" className="w-50 h-50 object-cover" />
                         </div>
 
                         <div className="bg-blue-50 p-4 rounded-2xl space-y-3">
@@ -316,7 +294,7 @@ export default function RegistroLibrePage() {
                         </div>
 
                         <div className="md:col-span-2 bg-green-50 p-4 rounded-xl space-y-4">
-                            <h3 className="font-bold text-green-800">3. Datos de Pago (Yape / Plin / Transferencia)</h3>
+                            <h3 className="font-bold text-green-800">3. Datos de Pago (Digital Exclusivo)</h3>
 
                             <div className="bg-yellow-100 border-2 border-yellow-300 p-4 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4">
                                 <div className="text-center md:text-left">
@@ -325,13 +303,24 @@ export default function RegistroLibrePage() {
                                         {montoAPagar > 0 ? `S/ ${montoAPagar.toFixed(2)}` : "S/ 0.00"}
                                     </p>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={() => setMostrarCuentas(true)}
-                                    className="bg-yellow-500 text-white font-black px-6 py-3 rounded-xl hover:bg-yellow-600 shadow-lg uppercase text-sm tracking-widest flex items-center gap-2 transition-all"
-                                >
+                                <button type="button" onClick={() => setMostrarCuentas(true)} className="bg-yellow-500 text-white font-black px-6 py-3 rounded-xl hover:bg-yellow-600 shadow-lg uppercase text-sm tracking-widest flex items-center gap-2 transition-all">
                                     <span>Ver Cuentas / Yape</span>
                                 </button>
+                            </div>
+
+                            {/* ================= SELECCIÓN DE MÉTODO INTERACTIVO ================= */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Selecciona cómo realizaste el pago *</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <label className={`cursor-pointer border-2 rounded-xl p-3 flex items-center justify-center font-bold uppercase transition-all ${formData.metodoPago === 'YAPE' ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-sm' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`}>
+                                        <input type="radio" name="metodoPago" value="YAPE" checked={formData.metodoPago === 'YAPE'} onChange={handleChange} className="sr-only" />
+                                        Yape / Plin
+                                    </label>
+                                    <label className={`cursor-pointer border-2 rounded-xl p-3 flex items-center justify-center font-bold uppercase transition-all ${formData.metodoPago === 'TRANSFERENCIA' ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm' : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'}`}>
+                                        <input type="radio" name="metodoPago" value="TRANSFERENCIA" checked={formData.metodoPago === 'TRANSFERENCIA'} onChange={handleChange} className="sr-only" />
+                                        Transferencia
+                                    </label>
+                                </div>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -340,8 +329,11 @@ export default function RegistroLibrePage() {
                                     <input type="file" accept="image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white" />
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">N° de Operación (Opcional, si figura en el voucher)</label>
-                                    <input name="numeroOperacion" type="text" value={formData.numeroOperacion} onChange={handleChange} className="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="Ej. 12345678" />
+                                    {/* AHORA ES OBLIGATORIO Y CAMBIA EL TEXTO SEGÚN LO SELECCIONADO */}
+                                    <label className="block text-sm font-medium text-red-600 mb-1">
+                                        N° de Operación ({formData.metodoPago === 'YAPE' ? 'Yape/Plin' : 'Transferencia'}) *
+                                    </label>
+                                    <input name="numeroOperacion" type="text" required value={formData.numeroOperacion} onChange={handleChange} className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-red-500 focus:border-red-500 bg-red-50" placeholder="Ingresa los dígitos de la operación" />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Fecha del Pago *</label>

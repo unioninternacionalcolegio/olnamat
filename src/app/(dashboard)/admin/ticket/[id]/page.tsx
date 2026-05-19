@@ -1,3 +1,4 @@
+// app/(dashboard)/admin/ticket/[id]/page.tsx
 import prisma from "@/lib/prisma"
 import TicketWrapper from "./TicketWrapper"
 
@@ -9,7 +10,8 @@ export default async function TicketPage({ params }: { params: Promise<{ id: str
         include: {
             cliente: true,
             estudiantes: true,
-            cajero: true
+            cajero: true,
+            detalles: true // <--- ¡ESTA ES LA LÍNEA QUE FALTABA!
         }
     })
 

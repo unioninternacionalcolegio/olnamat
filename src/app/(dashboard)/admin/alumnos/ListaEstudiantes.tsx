@@ -218,8 +218,8 @@ export default function ListaEstudiantes({ iniciales }: { iniciales: any[] }) {
                         onClick={handleImprimirSeleccionados}
                         disabled={seleccionados.length === 0}
                         className={`flex-1 md:flex-none px-6 py-2 rounded-lg font-bold flex items-center justify-center transition-colors shadow-sm ${seleccionados.length > 0
-                                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                                : "bg-gray-200 text-gray-400 cursor-not-allowed"
+                            ? "bg-blue-600 hover:bg-blue-700 text-white"
+                            : "bg-gray-200 text-gray-400 cursor-not-allowed"
                             }`}
                     >
                         <Printer className="w-4 h-4 mr-2" />
@@ -228,7 +228,7 @@ export default function ListaEstudiantes({ iniciales }: { iniciales: any[] }) {
 
                     <button
                         onClick={handleImprimirTodos}
-                        className="flex-1 md:flex-none bg-gray-800 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center transition-colors shadow-sm"
+                        className="flex-1 md:flex-none bg-gray-300 hover:bg-gray-900 text-white px-6 py-2 rounded-lg font-bold flex items-center justify-center transition-colors shadow-sm"
                     >
                         <Printer className="w-4 h-4 mr-2" />
                         Imp. Todos

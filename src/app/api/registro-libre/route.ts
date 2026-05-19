@@ -1,4 +1,3 @@
-// app/api/registro-libre/route.ts
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import bcrypt from "bcryptjs"
@@ -9,12 +8,17 @@ export async function POST(req: Request) {
         const body = await req.json()
         const {
             dni, nombres, apellidos, celular, localidad, institucion,
-            nivel, gradoOEdad, numeroOperacion, fechaPago, horaPago, comprobanteUrl
+            nivel, gradoOEdad, metodoPago, numeroOperacion, fechaPago, horaPago, comprobanteUrl
         } = body
 
-        // 1. Validar que los campos obligatorios existan (DNI e Institución son obligatorios)
-        if (!dni || !nombres || !apellidos || !institucion || !nivel || !gradoOEdad || !comprobanteUrl || !fechaPago || !horaPago) {
-            return NextResponse.json({ error: "Faltan datos obligatorios, incluyendo DNI, colegio, fecha y hora del voucher." }, { status: 400 })
+        // 1. Validar que los campos obligatorios existan (DNI, Institución y NRO OPERACIÓN son obligatorios)
+        if (!dni || !nombres || !apellidos || !institucion || !nivel || !gradoOEdad || !comprobanteUrl || !fechaPago || !horaPago || !metodoPago) {
+            return NextResponse.json({ error: "Faltan datos obligatorios, incluyendo DNI, colegio, método, fecha y hora del voucher." }, { status: 400 })
+        }
+
+        // 1.1 Validación estricta del número de operación (AHORA ES OBLIGATORIO)
+        if (!numeroOperacion || numeroOperacion.trim() === "") {
+            return NextResponse.json({ error: "El número de operación es obligatorio para registrar pagos digitales." }, { status: 400 })
         }
 
         const finalDni = dni.trim()
@@ -34,21 +38,19 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Este DNI ya se encuentra inscrito como estudiante en el concurso." }, { status: 400 })
         }
 
-        // 3. Verificar que el Número de Operación sea ÚNICO (si el usuario lo ingresó)
-        // CORRECCIÓN: Buscamos dentro de la nueva tabla Detalles
-        if (numeroOperacion && numeroOperacion.trim() !== "") {
-            const operacionExists = await prisma.pago.findFirst({
-                where: {
-                    detalles: {
-                        some: {
-                            numeroOperacion: numeroOperacion.trim()
-                        }
+        // 3. Verificar que el Número de Operación sea ÚNICO
+        const operacionExists = await prisma.pago.findFirst({
+            where: {
+                detalles: {
+                    some: {
+                        numeroOperacion: numeroOperacion.trim()
                     }
                 }
-            })
-            if (operacionExists) {
-                return NextResponse.json({ error: "Este número de operación ya fue usado. Verifica tu comprobante." }, { status: 400 })
             }
+        })
+
+        if (operacionExists) {
+            return NextResponse.json({ error: "Este número de operación ya fue registrado anteriormente. Verifica tu comprobante o contáctanos." }, { status: 400 })
         }
 
         const hashedPassword = await bcrypt.hash(finalDni, 10)
@@ -79,8 +81,7 @@ export async function POST(req: Request) {
                 }
             })
 
-            // Crear el Pago en estado PENDIENTE
-            // CORRECCIÓN: Usando la nueva relación de detalles
+            // Crear el Pago en estado PENDIENTE con su respectivo método interactivo
             const nuevoPago = await tx.pago.create({
                 data: {
                     montoTotal,
@@ -90,11 +91,11 @@ export async function POST(req: Request) {
                     detalles: {
                         create: [
                             {
-                                metodo: MetodoPago.YAPE, // Asumimos digital por subir voucher
+                                metodo: metodoPago as MetodoPago, // Guardará YAPE o TRANSFERENCIA
                                 monto: montoTotal,
-                                numeroOperacion: numeroOperacion ? numeroOperacion.trim() : null,
+                                numeroOperacion: numeroOperacion.trim(), // Ya validado que no está vacío
                                 fechaHoraPago: fechaHoraCompleta,
-                                comprobanteUrl: comprobanteUrl || null
+                                comprobanteUrl: comprobanteUrl
                             }
                         ]
                     }
@@ -109,7 +110,7 @@ export async function POST(req: Request) {
                     apellidos: apellidos.toUpperCase(),
                     nivel: nivel as Nivel,
                     gradoOEdad,
-                    institucion: institucion.toUpperCase(), // Ya viene con LIBRE- desde el front
+                    institucion: institucion.toUpperCase(),
                     localidad: localidad ? localidad.toUpperCase() : "SIN ESPECIFICAR",
                     estadoRegistro: EstadoRegistro.COMPLETO,
                     creadorId: newUser.id,

@@ -127,19 +127,35 @@ export default function TicketClient({ pago }: { pago: any }) {
                             /* =================== NUEVO MODO: MÚLTIPLES PAGOS =================== */
                             <div className="mb-2">
                                 <span className="font-bold text-[11px] uppercase block mb-1">Desglose de Pago(s):</span>
-                                {pago.detalles.map((d: any, idx: number) => (
-                                    <div key={idx} className="bg-gray-50 border-b border-dashed border-gray-300 pb-1 mb-1 print:bg-transparent">
-                                        <div className="flex justify-between items-end">
-                                            <span className="text-[10px] uppercase font-bold text-gray-700">{d.metodo}</span>
-                                            <span className="text-[10px] font-bold">S/ {d.monto.toFixed(2)}</span>
-                                        </div>
-                                        {d.numeroOperacion && (
-                                            <div className="text-[9px] text-gray-600 uppercase mt-[2px]">
-                                                OP: {d.numeroOperacion}
+                                {pago.detalles.map((d: any, idx: number) => {
+                                    // Calculamos la fecha para este detalle específico
+                                    const fechaDetalle = d.fechaHoraPago ? new Date(d.fechaHoraPago).toLocaleString('es-PE', {
+                                        dateStyle: 'short',
+                                        timeStyle: 'short'
+                                    }) : "N/A";
+
+                                    return (
+                                        <div key={idx} className="bg-gray-100 p-2 mb-2 border border-gray-300 rounded-lg print:bg-transparent print:border-gray-500">
+                                            <div className="flex justify-between items-end border-b border-gray-200 pb-1 mb-1 print:border-gray-400">
+                                                <span className="text-[10px] uppercase font-black text-gray-800">{d.metodo}</span>
+                                                <span className="text-[10px] font-black">S/ {d.monto.toFixed(2)}</span>
                                             </div>
-                                        )}
-                                    </div>
-                                ))}
+
+                                            {d.metodo !== "EFECTIVO" && (
+                                                <>
+                                                    <div className="flex justify-between items-end mt-1">
+                                                        <span className="font-bold text-[9px] uppercase text-gray-600">N° Operación:</span>
+                                                        <span className="text-[10px] font-bold">{d.numeroOperacion || "N/A"}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-end mt-1">
+                                                        <span className="font-bold text-[9px] uppercase text-gray-600">Fecha/Hora:</span>
+                                                        <span className="text-[10px] font-bold">{fechaDetalle}</span>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )
+                                })}
                             </div>
                         ) : (
                             /* =================== MODO ANTIGUO: RETROCOMPATIBILIDAD =================== */
@@ -150,13 +166,13 @@ export default function TicketClient({ pago }: { pago: any }) {
                                 </div>
 
                                 {pago.metodo !== "EFECTIVO" && (
-                                    <div className="bg-gray-100 p-1 mt-1 border border-gray-300 rounded print:bg-transparent print:border-gray-500">
+                                    <div className="bg-gray-100 p-2 mt-1 border border-gray-300 rounded-lg print:bg-transparent print:border-gray-500">
                                         <div className="flex justify-between items-end">
-                                            <span className="font-bold text-[9px] uppercase">N° Operación:</span>
+                                            <span className="font-bold text-[9px] uppercase text-gray-600">N° Operación:</span>
                                             <span className="text-[10px] font-bold">{pago.numeroOperacion || "N/A"}</span>
                                         </div>
                                         <div className="flex justify-between items-end mt-1">
-                                            <span className="font-bold text-[9px] uppercase">Fecha/Hora:</span>
+                                            <span className="font-bold text-[9px] uppercase text-gray-600">Fecha/Hora:</span>
                                             <span className="text-[10px] font-bold">{fechaTransferenciaAntigua || "N/A"}</span>
                                         </div>
                                     </div>

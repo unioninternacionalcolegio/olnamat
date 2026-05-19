@@ -1,4 +1,3 @@
-// app/(dashboard)/caja/CajaPOS.tsx
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -11,7 +10,8 @@ type Cliente = {
     dni: string | null,
     institucion: string | null,
     role: string,
-    tipoColegio: string
+    tipoColegio: string,
+    celular?: string | null
 }
 
 type ItemCarrito = {
@@ -54,36 +54,36 @@ export default function CajaPOS({
 
     const [mostrarRegistroRapido, setMostrarRegistroRapido] = useState(false)
 
-    // --- ESTADO PARA EL DESCUENTO MANUAL ---
     const [descuentoManual, setDescuentoManual] = useState<number>(0)
 
+    // AÑADIDO: celular en el estado inicial
     const [nuevoLibre, setNuevoLibre] = useState({
-        dni: "", nombres: "", apellidos: "", institucion: "",
+        dni: "", nombres: "", apellidos: "", institucion: "", celular: "",
         nivel: "PRIMARIA", gradoOEdad: ""
     })
 
-    // --- FILTRADOS Y CÁLCULOS INTELIGENTES ---
     const gradosDisponibles = useMemo(() => {
         return configuraciones
             .filter(c => c.nivel === nuevoLibre.nivel)
             .map(c => c.gradoOEdad)
     }, [configuraciones, nuevoLibre.nivel])
 
-    // Solo Delegados para el buscador principal
     const delegados = useMemo(() => clientes.filter(c => c.role === 'DELEGADO'), [clientes])
 
-    // Autocompletado de colegios únicos
     const colegiosUnicos = useMemo(() => {
         const set = new Set<string>()
         clientes.forEach(c => {
             if (c.institucion && c.institucion.trim() !== "" && c.institucion.toUpperCase() !== "ALUMNO LIBRE") {
-                set.add(c.institucion.toUpperCase())
+                let instLimpia = c.institucion.toUpperCase();
+                if (instLimpia.startsWith("LIBRE-")) {
+                    instLimpia = instLimpia.replace("LIBRE-", "").trim();
+                }
+                set.add(instLimpia)
             }
         })
         return Array.from(set).sort()
     }, [clientes])
 
-    // Estado del buscador de delegados
     const [busquedaDelegado, setBusquedaDelegado] = useState("")
     const [mostrarOpcionesDelegado, setMostrarOpcionesDelegado] = useState(false)
     const delegadosFiltrados = delegados.filter(d =>
@@ -169,13 +169,12 @@ export default function CajaPOS({
     }
 
     const registrarYSeleccionar = async () => {
-        if (!nuevoLibre.nombres || !nuevoLibre.gradoOEdad) {
-            return alert("Faltan datos obligatorios (Nombres o Grado).")
+        if (!nuevoLibre.nombres || !nuevoLibre.gradoOEdad || !nuevoLibre.institucion.trim()) {
+            return alert("Faltan datos obligatorios (Nombres, Grado o Colegio).")
         }
 
         let dniFinal = nuevoLibre.dni.trim()
 
-        // 1. GENERACIÓN AUTOMÁTICA DE DNI L000X
         if (!dniFinal) {
             const currentL = clientes
                 .filter(c => c.dni?.startsWith('L'))
@@ -185,10 +184,10 @@ export default function CajaPOS({
             dniFinal = "L" + nextNum.toString().padStart(4, '0');
         }
 
-        // 2. INSTITUCIÓN POR DEFECTO PARA LIBRES
-        let instFinal = tipoColegioActivo === 'LIBRE'
-            ? "ALUMNO LIBRE"
-            : (nuevoLibre.institucion || "ALUMNO LIBRE").toUpperCase()
+        let instFinal = nuevoLibre.institucion.trim().toUpperCase()
+        if (tipoColegioActivo === 'LIBRE' && !instFinal.startsWith("LIBRE-")) {
+            instFinal = `LIBRE-${instFinal}`
+        }
 
         setLoading(true)
         try {
@@ -200,9 +199,10 @@ export default function CajaPOS({
                     nombres: nuevoLibre.nombres,
                     apellidos: nuevoLibre.apellidos,
                     institucion: instFinal,
+                    celular: nuevoLibre.celular, // AÑADIDO: Se envía al backend
                     nivel: nuevoLibre.nivel,
                     gradoOEdad: nuevoLibre.gradoOEdad,
-                    role: "LIBRE", // A nivel de sistema es LIBRE (usuario sin privilegios)
+                    role: "LIBRE",
                     tipoColegio: tipoColegioActivo
                 }),
             })
@@ -215,12 +215,13 @@ export default function CajaPOS({
                 dni: data.user.dni,
                 institucion: instFinal,
                 tipoColegio: tipoColegioActivo,
-                role: "LIBRE"
+                role: "LIBRE",
+                celular: nuevoLibre.celular // Actualizamos el estado local
             }
 
             setClientes([...clientes, nuevoUser])
             setClienteSeleccionadoId(data.user.id)
-            setBusquedaDelegado(`${nuevoUser.name} (${nuevoUser.dni})`) // Visualmente seleccionado
+            setBusquedaDelegado(`${nuevoUser.name} (${nuevoUser.dni})`)
 
             agregarAlCarrito(nuevoLibre.nivel, nuevoLibre.gradoOEdad, {
                 dni: data.user.dni,
@@ -229,7 +230,8 @@ export default function CajaPOS({
             })
 
             setMostrarRegistroRapido(false)
-            setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "", institucion: "" })
+            // AÑADIDO: Limpiamos celular
+            setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "", institucion: "", celular: "" })
         } catch (error: any) {
             alert(error.message)
         } finally {
@@ -256,12 +258,16 @@ export default function CajaPOS({
         }
     }
 
-    // --- CÁLCULOS DE SUBTOTAL Y TOTAL CON DESCUENTO ---
     const subtotal = carrito.reduce((acc, item) => acc + (item.cantidad * item.precio), 0)
     const total = Math.max(0, subtotal - (descuentoManual || 0))
 
     const procesarVenta = async () => {
         if (!clienteSeleccionadoId || carrito.length === 0) return alert("Venta vacía")
+
+        if (metodoPago !== "EFECTIVO" && !numeroOperacion.trim()) {
+            return alert(`El N° de Operación es obligatorio para ${metodoPago}.`);
+        }
+
         setLoading(true)
         try {
             const res = await fetch("/api/caja/ticket", {
@@ -275,7 +281,7 @@ export default function CajaPOS({
                     montoTotal: total,
                     descuento: descuentoManual,
                     subtotal: subtotal,
-                    numeroOperacion,
+                    numeroOperacion: numeroOperacion.trim(),
                     fechaPago,
                     horaPago
                 })
@@ -286,6 +292,7 @@ export default function CajaPOS({
             setTicketVendido(data.ticket)
             setCarrito([])
             setDescuentoManual(0)
+            setNumeroOperacion("")
             setBusquedaDelegado("")
         } catch (error: any) {
             alert(`Error al cobrar: ${error.message}`)
@@ -307,24 +314,44 @@ export default function CajaPOS({
                 <div className="mt-4 bg-gray-50 p-6 rounded-2xl border border-gray-100 text-left w-full mx-auto shadow-inner">
                     <p className="text-[10px] font-black text-gray-400 uppercase mb-3">Detalles de la Operación</p>
                     <div className="space-y-2">
-                        <div className="flex justify-between border-b pb-1 border-gray-200">
-                            <span className="text-sm font-bold text-gray-500">Método de Pago:</span>
-                            <span className="text-sm font-black text-gray-800">{ticketVendido.metodo}</span>
-                        </div>
-                        {ticketVendido.metodo !== "EFECTIVO" && (
-                            <div className="flex justify-between border-b pb-1 border-gray-200">
-                                <span className="text-sm font-bold text-gray-500">N° Operación:</span>
-                                <span className="text-sm font-black text-gray-800">{ticketVendido.numeroOperacion || "No registrado"}</span>
-                            </div>
+                        {ticketVendido.detalles && ticketVendido.detalles.length > 0 ? (
+                            ticketVendido.detalles.map((d: any, idx: number) => (
+                                <div key={idx} className="border-b pb-2 mb-2 last:border-0 border-gray-200">
+                                    <div className="flex justify-between">
+                                        <span className="text-sm font-bold text-gray-500">Método de Pago:</span>
+                                        <span className="text-sm font-black text-gray-800">{d.metodo}</span>
+                                    </div>
+                                    {d.metodo !== "EFECTIVO" && (
+                                        <div className="flex justify-between">
+                                            <span className="text-sm font-bold text-gray-500">N° Operación:</span>
+                                            <span className="text-sm font-black text-gray-800">{d.numeroOperacion || "No registrado"}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            ))
+                        ) : (
+                            <>
+                                <div className="flex justify-between border-b pb-1 border-gray-200">
+                                    <span className="text-sm font-bold text-gray-500">Método de Pago:</span>
+                                    <span className="text-sm font-black text-gray-800">{ticketVendido.metodo || "N/A"}</span>
+                                </div>
+                                {ticketVendido.metodo !== "EFECTIVO" && (
+                                    <div className="flex justify-between border-b pb-1 border-gray-200">
+                                        <span className="text-sm font-bold text-gray-500">N° Operación:</span>
+                                        <span className="text-sm font-black text-gray-800">{ticketVendido.numeroOperacion || "No registrado"}</span>
+                                    </div>
+                                )}
+                            </>
                         )}
-                        <div className="flex justify-between border-b pb-1 border-gray-200">
+
+                        <div className="flex justify-between border-b pb-1 border-gray-200 mt-2">
                             <span className="text-sm font-bold text-gray-500">Total Pagado:</span>
                             <span className="text-sm font-black text-green-600">S/ {Number(ticketVendido.montoTotal).toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-sm font-bold text-gray-500">Fecha y Hora:</span>
                             <span className="text-sm font-black text-gray-800">
-                                {new Date(ticketVendido.fechaHoraPago).toLocaleString('es-PE', {
+                                {new Date(ticketVendido.createdAt).toLocaleString('es-PE', {
                                     dateStyle: 'short',
                                     timeStyle: 'short'
                                 })}
@@ -347,7 +374,6 @@ export default function CajaPOS({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-6">
 
-                {/* CONTROLES MAESTROS GLOBALES (Se movieron arriba para que apliquen al Registro Rápido) */}
                 <div className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-gray-100">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-gray-50 p-3 rounded-2xl border border-gray-200">
@@ -382,7 +408,6 @@ export default function CajaPOS({
                     </div>
                 </div>
 
-                {/* PANEL CLIENTE */}
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100">
                     <div className="flex justify-between items-center mb-6">
                         <label className="font-black text-gray-800 uppercase text-sm">Cliente (Delegado o Alumno)</label>
@@ -405,11 +430,13 @@ export default function CajaPOS({
                             <p className="text-xs text-gray-500 font-bold mb-2">
                                 Si dejas el DNI vacío, se generará uno automático (Ej. L0001).
                             </p>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* AÑADIDO: md:grid-cols-4 para dar espacio al nuevo input de Celular */}
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                                 <div>
                                     <input
-                                        placeholder="DNI (Opcional)"
+                                        placeholder="DNI"
                                         className={`w-full p-3 border rounded-xl font-bold ${errorDniLibre ? 'border-red-500 bg-red-50 text-red-600' : ''}`}
+                                        maxLength={8}
                                         value={nuevoLibre.dni}
                                         onChange={(e) => {
                                             setNuevoLibre({ ...nuevoLibre, dni: e.target.value })
@@ -421,6 +448,16 @@ export default function CajaPOS({
                                 </div>
                                 <input placeholder="NOMBRES" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.nombres} onChange={(e) => setNuevoLibre({ ...nuevoLibre, nombres: e.target.value })} />
                                 <input placeholder="APELLIDOS" className="p-3 border rounded-xl font-bold uppercase" value={nuevoLibre.apellidos} onChange={(e) => setNuevoLibre({ ...nuevoLibre, apellidos: e.target.value })} />
+
+                                {/* AÑADIDO: Input de Celular */}
+                                <input
+                                    placeholder="CELULAR"
+                                    className="p-3 border rounded-xl font-bold"
+                                    type="tel"
+                                    maxLength={9}
+                                    value={nuevoLibre.celular}
+                                    onChange={(e) => setNuevoLibre({ ...nuevoLibre, celular: e.target.value })}
+                                />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -430,11 +467,10 @@ export default function CajaPOS({
                                     </div>
                                     <input
                                         placeholder="Escribe o selecciona colegio..."
-                                        className="w-full p-3 pt-4 border rounded-xl font-bold uppercase disabled:bg-gray-200 disabled:text-gray-400"
-                                        value={tipoColegioActivo === "LIBRE" ? "ALUMNO LIBRE" : nuevoLibre.institucion}
+                                        className="w-full p-3 pt-4 border rounded-xl font-bold uppercase"
+                                        value={nuevoLibre.institucion}
                                         onChange={(e) => setNuevoLibre({ ...nuevoLibre, institucion: e.target.value })}
                                         list="colegios-list"
-                                        disabled={tipoColegioActivo === "LIBRE"}
                                     />
                                     <datalist id="colegios-list">
                                         {colegiosUnicos.map(col => <option key={col} value={col} />)}
@@ -467,7 +503,7 @@ export default function CajaPOS({
                             </div>
                             <button
                                 onClick={registrarYSeleccionar}
-                                disabled={errorDniLibre || !nuevoLibre.nombres || !nuevoLibre.gradoOEdad}
+                                disabled={errorDniLibre || !nuevoLibre.nombres || !nuevoLibre.gradoOEdad || !nuevoLibre.institucion.trim()}
                                 className="w-full bg-blue-600 text-white py-3 rounded-xl font-black uppercase text-sm shadow-lg disabled:bg-gray-400 disabled:shadow-none"
                             >
                                 Registrar y Auto-Agregar al Carrito
@@ -519,7 +555,6 @@ export default function CajaPOS({
                     )}
                 </div>
 
-                {/* BOTONES DE CUPOS (Se oculta si está en registro rápido para evitar cruces) */}
                 {!mostrarRegistroRapido && (
                     <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6">
                         <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest border-b pb-2">Agregar Cupos Rápidos</h3>
@@ -542,7 +577,6 @@ export default function CajaPOS({
 
             </div>
 
-            {/* CARRITO (Igual) */}
             <div className="bg-white flex flex-col h-[750px] rounded-[2.5rem] shadow-xl border border-gray-100 overflow-hidden sticky top-6">
                 <div className="p-6 bg-gray-500 text-white flex justify-between items-center font-black text-sm uppercase">Carrito Detalle</div>
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -581,9 +615,8 @@ export default function CajaPOS({
                     {carrito.length === 0 && <div className="text-center text-gray-400 text-xs py-10 font-bold">CARRITO VACÍO</div>}
                 </div>
 
-                {/* ZONA DE COBRO CON DESCUENTO */}
-                <div className="p-8 bg-gray-900 text-white space-y-4">
-                    <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full p-3 bg-gray-500 border border-gray-700 rounded-xl text-xs font-bold">
+                <div className="p-8 bg-gray-700 text-white space-y-4">
+                    <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full p-3 bg-gray-200 border border-gray-900 rounded-xl text-xs font-bold">
                         <option value="EFECTIVO">💵 EFECTIVO</option>
                         <option value="YAPE">📱 YAPE / PLIN</option>
                         <option value="TRANSFERENCIA">🏦 TRANSFERENCIA</option>
@@ -591,15 +624,14 @@ export default function CajaPOS({
 
                     {metodoPago !== "EFECTIVO" && (
                         <div className="space-y-2">
-                            <input placeholder="N° Operación" className="w-full p-2 bg-gray-500 border border-gray-700 rounded-xl text-[10px] font-bold" value={numeroOperacion} onChange={(e) => setNumeroOperacion(e.target.value)} />
+                            <input placeholder="N° Operación (Obligatorio)" className="w-full p-2 bg-gray-200 border border-gray-700 rounded-xl text-[15px] font-bold text-white placeholder-gray-500" value={numeroOperacion} onChange={(e) => setNumeroOperacion(e.target.value)} />
                             <div className="flex gap-2">
-                                <input type="date" className="w-1/2 p-2 bg-gray-500 border border-gray-700 rounded-xl text-[9px] font-bold" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} />
-                                <input type="time" className="w-1/2 p-2 bg-gray-500 border border-gray-700 rounded-xl text-[9px] font-bold" value={horaPago} onChange={(e) => setHoraPago(e.target.value)} />
+                                <input type="date" className="w-1/2 p-2 bg-gray-200 border border-gray-700 rounded-xl text-[15px] font-bold" value={fechaPago} onChange={(e) => setFechaPago(e.target.value)} />
+                                <input type="time" className="w-1/2 p-2 bg-gray-200 border border-gray-700 rounded-xl text-[15px] font-bold" value={horaPago} onChange={(e) => setHoraPago(e.target.value)} />
                             </div>
                         </div>
                     )}
 
-                    {/* INPUT DE DESCUENTO */}
                     <div className="flex justify-between items-center bg-gray-800 p-3 rounded-xl border border-gray-700">
                         <div className="flex items-center text-gray-400">
                             <Tag className="w-4 h-4 mr-2" />
@@ -616,7 +648,6 @@ export default function CajaPOS({
                         />
                     </div>
 
-                    {/* RESUMEN FINAL DE PRECIOS */}
                     <div className="space-y-1 text-sm border-t border-gray-800 pt-4">
                         <div className="flex justify-between text-gray-400">
                             <span>Subtotal</span>

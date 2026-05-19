@@ -1,7 +1,8 @@
 //app/(dashboard)/admin/ver-pagos/ListaPagos.tsx
 "use client"
 import { useState, useMemo } from "react"
-import { Check, X, Eye, ExternalLink, Calendar, Printer, Search, FileSpreadsheet, UserCheck, Wallet, Image as ImageIcon, CheckCircle } from "lucide-react"
+// AÑADIDO: Importamos MessageCircle para usarlo como ícono de WhatsApp
+import { Check, X, Eye, ExternalLink, Calendar, Printer, Search, FileSpreadsheet, UserCheck, Wallet, Image as ImageIcon, CheckCircle, MessageCircle } from "lucide-react"
 import * as XLSX from "xlsx"
 
 type TabType = "TODOS" | "COLEGIO" | "DELEGADO" | "LIBRE"
@@ -70,7 +71,6 @@ export default function ListaPagos({
             if (soloMisCobros && p.cajeroId !== currentUserId && p.estado !== 'PENDIENTE') return false
 
             if (metodoFiltro) {
-                // Compatible con pagos nuevos (detalles) y antiguos (p.metodo)
                 const metodoAntiguo = p.metodo;
                 const tieneYapePlin = p.detalles?.some((d: any) => d.metodo === 'YAPE' || d.metodo === 'PLIN') || (metodoAntiguo === 'YAPE' || metodoAntiguo === 'PLIN');
                 const tieneTransf = p.detalles?.some((d: any) => d.metodo === 'TRANSFERENCIA') || metodoAntiguo === 'TRANSFERENCIA';
@@ -126,7 +126,6 @@ export default function ListaPagos({
         aprobados.forEach(p => {
             recaudado += p.montoTotal;
 
-            // Validar si es pago nuevo (múltiple) o viejo (único)
             if (p.detalles && p.detalles.length > 0) {
                 p.detalles.forEach((d: any) => {
                     if (d.metodo === 'YAPE' || d.metodo === 'PLIN') yapePlin += d.monto;
@@ -154,7 +153,7 @@ export default function ListaPagos({
         const aprobados = pagosFiltrados.filter(p => p.estado === 'APROBADO');
         if (aprobados.length === 0) return alert("No hay cobros aprobados para exportar con los filtros actuales.");
 
-        const dataToExport = aprobados.map(p => {
+        const dataToExport: any[] = aprobados.map(p => {
             const listaEstudiantes = p.estudiantes?.map((e: any) => `${e.nombres} ${e.apellidos} (${e.dni || 'Sin DNI'})`).join(" | ") || "N/A";
             const fechaHora = new Date(p.createdAt).toLocaleString();
 
@@ -168,6 +167,7 @@ export default function ListaPagos({
                 "Comprobante": p.correlativo ? `${p.serie}-${String(p.correlativo).padStart(6, '0')}` : "N/A",
                 "Fecha y Hora": fechaHora,
                 "Cliente (Quien Pagó)": p.cliente.name || "Sin nombre",
+                "Celular": p.cliente.celular || "N/A", // Añadido celular al Excel
                 "Estudiantes Inscritos": listaEstudiantes,
                 "Métodos de Pago": metodosUsados,
                 "Nro Operaciones": operaciones,
@@ -176,6 +176,14 @@ export default function ListaPagos({
                 "Cajero / Aprobador": p.cajero?.name || "N/A"
             }
         });
+
+        // AÑADIDO: Filas de resumen al final del Excel
+        dataToExport.push({}); // Fila vacía para separar
+        dataToExport.push({ "Comprobante": "======= RESUMEN DEL DÍA =======" });
+        dataToExport.push({ "Comprobante": "TOTAL YAPE / PLIN:", "Total Pagado": `S/ ${totales.yapePlin.toFixed(2)}` });
+        dataToExport.push({ "Comprobante": "TOTAL TRANSFERENCIA:", "Total Pagado": `S/ ${totales.transferencia.toFixed(2)}` });
+        dataToExport.push({ "Comprobante": "TOTAL EFECTIVO:", "Total Pagado": `S/ ${totales.efectivo.toFixed(2)}` });
+        dataToExport.push({ "Comprobante": "TOTAL GENERAL RECAUDADO:", "Total Pagado": `S/ ${totales.dineroRecaudado.toFixed(2)}` });
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
@@ -263,6 +271,8 @@ export default function ListaPagos({
                         <tr>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Comprobante / Estado</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Cliente / Delegado</th>
+                            {/* AÑADIDO: Nueva columna de Contacto */}
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Contacto</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Aprobado Por</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Cupos</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Monto & Método</th>
@@ -271,10 +281,20 @@ export default function ListaPagos({
                     </thead>
                     <tbody className="divide-y">
                         {pagosFiltrados.length === 0 ? (
-                            <tr><td colSpan={6} className="p-8 text-center text-gray-500 font-bold italic">No se encontraron pagos con estos filtros.</td></tr>
+                            <tr><td colSpan={7} className="p-8 text-center text-gray-500 font-bold italic">No se encontraron pagos con estos filtros.</td></tr>
                         ) : pagosFiltrados.map((p) => {
                             const isMultiple = p.detalles && p.detalles.length > 1;
                             const firstMetodo = p.detalles?.length > 0 ? p.detalles[0].metodo : (p.metodo || "N/A");
+
+                            // AÑADIDO: Lógica para generar el link de WhatsApp si tiene celular
+                            let waLink = null;
+                            if (p.cliente.celular) {
+                                const soloNumeros = p.cliente.celular.replace(/\D/g, '');
+                                // Si tiene 9 dígitos exactos, asumimos que es número de Perú y le agregamos 51
+                                const celularConCodigo = soloNumeros.length === 9 ? `51${soloNumeros}` : soloNumeros;
+                                const mensajeWa = encodeURIComponent(`Hola ${p.cliente.name}, te escribimos de la Olimpiada Nacional de Matemática (OLNAMAT) para informarte que se aprobo tu pago y te enviamos tu carnet para que puedas imprimirlo muchos existos te esperamos este 13 de Junio`);
+                                waLink = `https://wa.me/${celularConCodigo}?text=${mensajeWa}`;
+                            }
 
                             return (
                                 <tr key={p.id} className="hover:bg-gray-50 transition-colors">
@@ -299,6 +319,24 @@ export default function ListaPagos({
                                             <Calendar className="w-3 h-3 mr-1" /> {new Date(p.createdAt).toLocaleDateString()}
                                         </p>
                                     </td>
+
+                                    {/* AÑADIDO: Celda de WhatsApp */}
+                                    <td className="p-4 text-center">
+                                        {waLink ? (
+                                            <a
+                                                href={waLink}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center space-x-1 text-[11px] font-bold text-green-700 bg-green-50 px-2 py-1 rounded-lg border border-green-200 hover:bg-green-100 transition-colors shadow-sm"
+                                                title="Enviar WhatsApp"
+                                            >
+                                                <MessageCircle className="w-3 h-3" /> <span>{p.cliente.celular}</span>
+                                            </a>
+                                        ) : (
+                                            <span className="text-[10px] text-gray-400 italic bg-gray-100 px-2 py-1 rounded">Sin número</span>
+                                        )}
+                                    </td>
+
                                     <td className="p-4">
                                         {p.estado !== 'PENDIENTE' && p.cajero ? (
                                             <div className="flex flex-col items-start">
@@ -326,7 +364,7 @@ export default function ListaPagos({
                                                 <Eye className="w-4 h-4" /> <span>Revisar</span>
                                             </button>
                                             {p.estado === 'APROBADO' && (
-                                                <button onClick={() => window.open(`/admin/ticket/${p.id}`, '_blank')} className="flex items-center space-x-1 bg-gray-800 hover:bg-black text-white px-3 py-1.5 rounded-lg text-sm transition-colors font-bold shadow-sm" title="Reimprimir Ticket">
+                                                <button onClick={() => window.open(`/admin/ticket/${p.id}`, '_blank')} className="flex items-center space-x-1 bg-gray-400 hover:bg-black text-white px-3 py-1.5 rounded-lg text-sm transition-colors font-bold shadow-sm" title="Reimprimir Ticket">
                                                     <Printer className="w-4 h-4" />
                                                 </button>
                                             )}
@@ -339,7 +377,7 @@ export default function ListaPagos({
                 </table>
             </div>
 
-            {/* ================= MODAL DE REVISIÓN MULTI-PAGO (CON RETROCOMPATIBILIDAD) ================= */}
+            {/* ================= MODAL DE REVISIÓN MULTI-PAGO ================= */}
             {pagoEnRevision && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -377,7 +415,6 @@ export default function ListaPagos({
 
                             <h4 className="font-black text-gray-700 mb-4 uppercase text-sm border-b pb-2">Desglose de Comprobantes</h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                                {/* LÓGICA INTELIGENTE: Si tiene detalles (nuevo), los mapea. Si no (antiguo), crea un array falso con los datos principales */}
                                 {(() => {
                                     const listaADibujar = pagoEnRevision.detalles && pagoEnRevision.detalles.length > 0
                                         ? pagoEnRevision.detalles
