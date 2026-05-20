@@ -223,26 +223,38 @@ export default function FormInscripcion({
 
             {/* --- SECCIÓN 1: DATOS BANCARIOS INFORMATIVOS --- */}
             <div className="bg-gradient-to-r from-blue-900 to-blue-800 p-6 rounded-2xl shadow-sm text-white border border-blue-700">
-                <h3 className="font-bold flex items-center mb-4 text-lg"><Landmark className="w-5 h-5 mr-2" /> Cuentas Autorizadas para Recaudación</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col items-center text-center">
-                        <QrCode className="w-12 h-12 text-green-400 mb-2" />
-                        <h4 className="font-black text-xl text-green-400">YAPE / PLIN</h4>
-                        <p className="text-2xl font-bold tracking-widest mt-1">999 999 999</p>
-                        <p className="text-sm text-blue-200 mt-1">Titular: Juan Perez (Tesorero)</p>
-                    </div>
-                    <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center text-center">
-                        <h4 className="font-black text-lg text-blue-300">Banco de la Nación</h4>
-                        <p className="text-xl font-bold mt-2">04-000-000000</p>
-                        <p className="text-sm text-blue-200 mt-1">CCI: 018-000-00400000000-00</p>
-                    </div>
-                    <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center text-center">
-                        <h4 className="font-black text-lg text-amber-400">Banco BCP</h4>
-                        <p className="text-xl font-bold mt-2">123-4567890-1-23</p>
-                        <p className="text-sm text-blue-200 mt-1">CCI: 002-123-004567890123-00</p>
-                    </div>
-                </div>
-            </div>
+    <h3 className="font-bold flex items-center mb-4 text-lg">
+        <Landmark className="w-5 h-5 mr-2" /> Cuentas Autorizadas para Recaudación
+    </h3>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        {/* Bloque 1: Datos de YAPE / PLIN */}
+        <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center items-center text-center">
+            <h4 className="font-black text-xl text-green-400">YAPE / PLIN</h4>
+            <p className="text-2xl font-bold tracking-widest mt-2">925 904 377</p>
+            <p className="text-sm text-blue-200 mt-1">Titular: Josue Riveros</p>
+        </div>
+
+        {/* Bloque 2: Banco BCP */}
+        <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center text-center">
+            <h4 className="font-black text-lg text-amber-400">Banco BCP</h4>
+            <p className="text-xl font-bold mt-2">355-07706069-0-44</p>
+            <p className="text-sm text-blue-200 mt-1">CCI: 002-35510770606904460</p>
+            <p className="text-sm text-blue-200 mt-1">Titular: Josue Riveros</p>
+        </div>
+
+        {/* Bloque 3: Imagen del Código QR */}
+        <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col items-center justify-center text-center">
+            <p className="text-xs font-bold uppercase tracking-wider text-blue-200 mb-2">Escanea aquí</p>
+            <img 
+                src="/yape-plin.jpg" 
+                alt="Código QR Yape Plin" 
+                className="w-28 h-28 object-contain bg-white p-1 rounded-lg shadow-md"
+            />
+        </div>
+
+    </div>
+</div>
 
             {/* --- SECCIÓN 2: ALUMNOS --- */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
