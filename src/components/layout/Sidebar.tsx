@@ -56,7 +56,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         {
             name: "Resultados",
             icon: Trophy,
-            roles: ["DELEGADO", "REPRESENTANTE_IE"],
+            roles: [ "REPRESENTANTE_IE"],
             subItems: [
                 { name: "General", href: "/delegado/resultados" },
                 { name: "Inicial", href: "/delegado/resultados/inicial" },

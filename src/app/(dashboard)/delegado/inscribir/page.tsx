@@ -1,3 +1,4 @@
+//app/(dashboard)/delegado/inscribir/page.tsx
 import FormInscripcion from "./FormInscripcion"
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth/next"

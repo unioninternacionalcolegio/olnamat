@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
-import { Plus, Trash2, Calculator, Upload, Info, Image as ImageIcon, Clock, Building2, Ticket, CheckCircle, XCircle, Wallet, QrCode, Landmark, AlertCircle } from "lucide-react"
+import { Plus, Trash2, Calculator, Info, Image as ImageIcon, Clock, Building2, Ticket, CheckCircle, XCircle, Wallet, Landmark, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import imageCompression from 'browser-image-compression'
 import ImportarExcel from "@/components/ImportarExcel"
@@ -13,7 +13,6 @@ const OPCIONES_GRADOS = {
     SECUNDARIA: ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
 }
 
-// Función para obtener la hora actual exacta en Perú en formato para el input datetime-local
 const getHoraPeruLocal = () => {
     try {
         const opciones: Intl.DateTimeFormatOptions = {
@@ -23,7 +22,6 @@ const getHoraPeruLocal = () => {
         const formateador = new Intl.DateTimeFormat('sv-SE', opciones);
         return formateador.format(new Date()).replace(' ', 'T');
     } catch (e) {
-        // Fallback genérico si el navegador no soporta sv-SE
         const d = new Date();
         d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
         return d.toISOString().slice(0, 16);
@@ -44,8 +42,12 @@ export default function FormInscripcion({
     const router = useRouter()
     const [loading, setLoading] = useState(false)
 
-    const [dnisDuplicados, setDnisDuplicados] = useState<number[]>([])
-    const [opsDuplicadas, setOpsDuplicadas] = useState<number[]>([])
+    // ESTADOS DE VALIDACIÓN VISUAL (Para UX)
+    const [dnisDuplicadosDB, setDnisDuplicadosDB] = useState<number[]>([]) 
+    const [dnisDuplicadosLocal, setDnisDuplicadosLocal] = useState<number[]>([]) 
+    const [opsDuplicadasDB, setOpsDuplicadasDB] = useState<number[]>([]) 
+    const [opsDuplicadasLocal, setOpsDuplicadasLocal] = useState<number[]>([]) 
+    
     const [vouchersFiles, setVouchersFiles] = useState<Record<number, { file: File, preview: string }>>({})
 
     const [codigoCuponInput, setCodigoCuponInput] = useState("")
@@ -78,13 +80,31 @@ export default function FormInscripcion({
     const alumnosWatch = watch("alumnos")
     const pagosWatch = watch("pagos")
 
-    // Cálculos Monetarios
+    // ---> VALIDACIÓN VISUAL EN TIEMPO REAL (LOCAL)
+    useEffect(() => {
+        const dnis = alumnosWatch.map(a => a.dni);
+        const duplicados = dnis.map((dni, index) => {
+            if (dni && dni.length > 0 && dnis.filter(d => d === dni).length > 1) return index;
+            return -1;
+        }).filter(i => i !== -1);
+        setDnisDuplicadosLocal(duplicados);
+    }, [alumnosWatch]);
+
+    useEffect(() => {
+        const ops = pagosWatch.map(p => p.numeroOperacion);
+        const duplicadas = ops.map((op, index) => {
+            if (op && op.length > 0 && pagosWatch[index].metodo !== "EFECTIVO" && ops.filter(o => o === op).length > 1) return index;
+            return -1;
+        }).filter(i => i !== -1);
+        setOpsDuplicadasLocal(duplicadas);
+    }, [pagosWatch]);
+
     const subTotalPagar = alumnosWatch.reduce((acc, alum) => {
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad)
         if (!config) return acc + 15;
         let costo = config.costoEstatalReg;
-        if (alum.tipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
-        if (alum.tipoColegio === 'LIBRE') costo = config.costoLibreReg;
+        if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
+        if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
         return acc + costo;
     }, 0)
 
@@ -93,13 +113,12 @@ export default function FormInscripcion({
 
     const totalAbonado = pagosWatch.reduce((acc, p) => acc + (Number(p.monto) || 0), 0)
     const diferencia = totalFinal - totalAbonado
-    const incentivo = Math.floor(alumnosWatch.length / 10)
 
     const handleImportedData = (nuevosAlumnos: any[]) => {
         const alumnosConColegio = nuevosAlumnos.map(alum => ({
             ...alum, nivel: nivelFijo || alum.nivel || "PRIMARIA",
-            tipoColegio: alum.tipoColegio || userTipoColegio,
-            institucion: alum.institucion || userInstitucion
+            tipoColegio: userTipoColegio,
+            institucion: userInstitucion
         }))
         setValue("alumnos", alumnosConColegio)
     }
@@ -111,10 +130,10 @@ export default function FormInscripcion({
         }
     }
 
-    // VALIDACIÓN INTELIGENTE DE DNI
-    const verificarDniIndividual = async (dni: string, index: number) => {
+    // VERIFICACIÓN VISUAL ON BLUR
+    const verificarDniEnBaseDatos = async (dni: string, index: number) => {
         if (!dni || dni.length < 8) {
-            setDnisDuplicados(prev => prev.filter(i => i !== index)); return;
+            setDnisDuplicadosDB(prev => prev.filter(i => i !== index)); return;
         }
         try {
             const res = await fetch('/api/estudiantes/verificar-dnis', {
@@ -122,28 +141,27 @@ export default function FormInscripcion({
                 body: JSON.stringify({ dnis: [dni] })
             })
             const data = await res.json()
-            if (data.registrados?.includes(dni) && !dnisDuplicados.includes(index)) {
-                setDnisDuplicados([...dnisDuplicados, index])
+            if (data.registrados?.includes(dni) && !dnisDuplicadosDB.includes(index)) {
+                setDnisDuplicadosDB([...dnisDuplicadosDB, index])
             } else if (!data.registrados?.includes(dni)) {
-                setDnisDuplicados(prev => prev.filter(i => i !== index))
+                setDnisDuplicadosDB(prev => prev.filter(i => i !== index))
             }
         } catch (error) { console.error("Error verificando DNI:", error) }
     }
 
-    // VALIDACIÓN INTELIGENTE DE NRO OPERACIÓN
-    const verificarNumeroOperacion = async (nroOperacion: string, index: number) => {
-        if (!nroOperacion || nroOperacion.length < 4) {
-            setOpsDuplicadas(prev => prev.filter(i => i !== index)); return;
+    const verificarOperacionEnBaseDatos = async (operacion: string, index: number) => {
+        if (!operacion || operacion.length < 4) {
+            setOpsDuplicadasDB(prev => prev.filter(i => i !== index)); return;
         }
         try {
-            const res = await fetch(`/api/pagos/verificar?operacion=${nroOperacion}`)
+            const res = await fetch(`/api/pagos/verificar?operacion=${operacion.trim()}`)
             const data = await res.json()
-            if (data.existe && !opsDuplicadas.includes(index)) {
-                setOpsDuplicadas([...opsDuplicadas, index])
+            if (data.existe && !opsDuplicadasDB.includes(index)) {
+                setOpsDuplicadasDB([...opsDuplicadasDB, index])
             } else if (!data.existe) {
-                setOpsDuplicadas(prev => prev.filter(i => i !== index))
+                setOpsDuplicadasDB(prev => prev.filter(i => i !== index))
             }
-        } catch (error) { console.error("Error verificando Nro Operación:", error) }
+        } catch (error) { console.error("Error verificando Operación:", error) }
     }
 
     const verificarCupon = async () => {
@@ -166,7 +184,59 @@ export default function FormInscripcion({
         if (diferencia !== 0 && totalFinal > 0) return alert(`Los pagos no cuadran. Falta abonar S/ ${diferencia.toFixed(2)}`)
 
         setLoading(true)
+        
         try {
+            // ==========================================
+            // 🛡️ VALIDACIÓN TOTAL (ESCUDO FINAL) 🛡️
+            // ==========================================
+
+            // 1. Verificar DNIs duplicados localmente (en el formulario)
+            const dnisList = data.alumnos.map((a: any) => a.dni).filter(Boolean);
+            const dnisUnicos = new Set(dnisList);
+            if (dnisUnicos.size !== dnisList.length) {
+                alert("❌ Tienes DNIs duplicados entre los alumnos que estás intentando registrar ahora mismo. Por favor, revisa y corrige.");
+                setLoading(false);
+                return;
+            }
+
+            // 2. Verificar DNIs duplicados en la Base de Datos
+            const resDni = await fetch('/api/estudiantes/verificar-dnis', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dnis: Array.from(dnisUnicos) })
+            });
+            const dbDniData = await resDni.json();
+            if (dbDniData.registrados && dbDniData.registrados.length > 0) {
+                alert(`❌ Los siguientes DNIs YA ESTÁN REGISTRADOS en el sistema: ${dbDniData.registrados.join(', ')}. Quítalos del formulario para poder continuar.`);
+                setLoading(false);
+                return;
+            }
+
+            // 3. Verificar Operaciones duplicadas localmente (en el formulario)
+            const opsList = data.pagos
+                .filter((p: any) => p.metodo !== "EFECTIVO" && p.numeroOperacion)
+                .map((p: any) => p.numeroOperacion.trim());
+            const opsUnicas = new Set(opsList);
+            if (opsUnicas.size !== opsList.length) {
+                alert("❌ Tienes Números de Operación repetidos en este formulario. Cada voucher debe tener un número único.");
+                setLoading(false);
+                return;
+            }
+
+            // 4. Verificar Operaciones duplicadas en la Base de Datos
+            for (const op of Array.from(opsUnicas)) {
+                const resOp = await fetch(`/api/pagos/verificar?operacion=${op}`);
+                const dbOpData = await resOp.json();
+                if (dbOpData.existe) {
+                    alert(`❌ El Número de Operación '${op}' YA HA SIDO UTILIZADO en otra inscripción. No se puede reutilizar.`);
+                    setLoading(false);
+                    return;
+                }
+            }
+            
+            // ==========================================
+            // SI PASA EL ESCUDO, SUBIMOS LAS IMÁGENES Y PROCESAMOS
+            // ==========================================
+
             const pagosProcesados = await Promise.all(data.pagos.map(async (pago: any, index: number) => {
                 let comprobanteUrl = null;
                 const voucher = vouchersFiles[index];
@@ -192,8 +262,16 @@ export default function FormInscripcion({
                 }
             }))
 
+            const nombreInstitucionFinal = userTipoColegio === 'LIBRE' 
+                ? (userInstitucion.startsWith("LIBRE-") ? userInstitucion : `LIBRE-${userInstitucion}`)
+                : userInstitucion;
+
             const payload = {
-                estudiantes: data.alumnos,
+                estudiantes: data.alumnos.map((a: any) => ({
+                    ...a,
+                    tipoColegio: userTipoColegio,
+                    institucion: nombreInstitucionFinal 
+                })),
                 montoTotal: subTotalPagar,
                 codigoCupon: cuponAplicado?.codigo,
                 pagosParciales: pagosProcesados
@@ -213,50 +291,39 @@ export default function FormInscripcion({
             router.push("/delegado/mis-pagos")
         } catch (error: any) {
             alert(error.message)
-        } finally {
             setLoading(false)
         }
     }
 
+    // El botón se bloquea si hay errores visuales evidentes
+    const isBotonBloqueado = loading || alumnosWatch.length === 0 || dnisDuplicadosDB.length > 0 || dnisDuplicadosLocal.length > 0 || opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0 || (totalFinal > 0 && diferencia !== 0);
+
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
 
-            {/* --- SECCIÓN 1: DATOS BANCARIOS INFORMATIVOS --- */}
             <div className="bg-gradient-to-r from-blue-900 to-blue-800 p-6 rounded-2xl shadow-sm text-white border border-blue-700">
-    <h3 className="font-bold flex items-center mb-4 text-lg">
-        <Landmark className="w-5 h-5 mr-2" /> Cuentas Autorizadas para Recaudación
-    </h3>
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        
-        {/* Bloque 1: Datos de YAPE / PLIN */}
-        <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center items-center text-center">
-            <h4 className="font-black text-xl text-green-400">YAPE / PLIN</h4>
-            <p className="text-2xl font-bold tracking-widest mt-2">925 904 377</p>
-            <p className="text-sm text-blue-200 mt-1">Titular: Josue Riveros</p>
-        </div>
+                <h3 className="font-bold flex items-center mb-4 text-lg">
+                    <Landmark className="w-5 h-5 mr-2" /> Cuentas Autorizadas para Recaudación
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center items-center text-center">
+                        <h4 className="font-black text-xl text-green-400">YAPE / PLIN</h4>
+                        <p className="text-2xl font-bold tracking-widest mt-2">925 904 377</p>
+                        <p className="text-sm text-blue-200 mt-1">Titular: Josue Riveros</p>
+                    </div>
+                    <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center text-center">
+                        <h4 className="font-black text-lg text-amber-400">Banco BCP</h4>
+                        <p className="text-xl font-bold mt-2">355-07706069-0-44</p>
+                        <p className="text-sm text-blue-200 mt-1">CCI: 002-35510770606904460</p>
+                        <p className="text-sm text-blue-200 mt-1">Titular: Josue Riveros</p>
+                    </div>
+                    <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col items-center justify-center text-center">
+                        <p className="text-xs font-bold uppercase tracking-wider text-blue-200 mb-2">Escanea aquí</p>
+                        <img src="/yape-plin.jpg" alt="Código QR Yape Plin" className="w-28 h-28 object-contain bg-white p-1 rounded-lg shadow-md" />
+                    </div>
+                </div>
+            </div>
 
-        {/* Bloque 2: Banco BCP */}
-        <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col justify-center text-center">
-            <h4 className="font-black text-lg text-amber-400">Banco BCP</h4>
-            <p className="text-xl font-bold mt-2">355-07706069-0-44</p>
-            <p className="text-sm text-blue-200 mt-1">CCI: 002-35510770606904460</p>
-            <p className="text-sm text-blue-200 mt-1">Titular: Josue Riveros</p>
-        </div>
-
-        {/* Bloque 3: Imagen del Código QR */}
-        <div className="bg-white/10 p-4 rounded-xl border border-white/20 flex flex-col items-center justify-center text-center">
-            <p className="text-xs font-bold uppercase tracking-wider text-blue-200 mb-2">Escanea aquí</p>
-            <img 
-                src="/yape-plin.jpg" 
-                alt="Código QR Yape Plin" 
-                className="w-28 h-28 object-contain bg-white p-1 rounded-lg shadow-md"
-            />
-        </div>
-
-    </div>
-</div>
-
-            {/* --- SECCIÓN 2: ALUMNOS --- */}
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <h2 className="text-xl font-bold text-gray-800">
@@ -274,7 +341,7 @@ export default function FormInscripcion({
                     {alumnosFields.map((field, index) => {
                         const nivelActual = (nivelFijo || alumnosWatch[index]?.nivel || "PRIMARIA") as keyof typeof OPCIONES_GRADOS;
                         const gradoActual = alumnosWatch[index]?.gradoOEdad || OPCIONES_GRADOS[nivelActual][0];
-                        const tipoColegioActual = alumnosWatch[index]?.tipoColegio || "ESTATAL";
+                        const tipoColegioActual = userTipoColegio;
 
                         const configAlumno = precios.find(p => p.nivel === nivelActual && p.gradoOEdad === gradoActual);
                         let costoAlumno = 0;
@@ -284,22 +351,40 @@ export default function FormInscripcion({
                             if (tipoColegioActual === 'LIBRE') costoAlumno = configAlumno.costoLibreReg;
                         }
 
+                        const hasDniLocalError = dnisDuplicadosLocal.includes(index);
+                        const hasDniDbError = dnisDuplicadosDB.includes(index);
+
                         return (
                             <div key={field.id} className="p-5 bg-gray-50 rounded-xl border border-gray-200 relative shadow-sm hover:shadow-md transition-shadow">
-                                <button type="button" onClick={() => removeAlumno(index)} className="absolute -top-3 -right-3 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-full transition-colors shadow-sm" title="Eliminar Alumno">
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
+                                {alumnosFields.length > 1 && (
+                                    <button type="button" onClick={() => removeAlumno(index)} className="absolute -top-3 -right-3 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-full transition-colors shadow-sm" title="Eliminar Alumno">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 relative">
                                     <div className="md:col-span-1 relative">
-                                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">DNI</label>
-                                        <input {...register(`alumnos.${index}.dni`)} onBlur={(e) => verificarDniIndividual(e.target.value, index)} placeholder="Obligatorio" className={`w-full p-2.5 border rounded-lg text-sm bg-white ${dnisDuplicados.includes(index) ? 'border-red-500 bg-red-50 focus:ring-red-500' : ''}`} />
+                                        <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">DNI (Obligatorio)</label>
+                                        <input 
+                                            {...register(`alumnos.${index}.dni`)} 
+                                            maxLength={8}
+                                            onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/\D/g, '') }}
+                                            onBlur={(e) => verificarDniEnBaseDatos(e.target.value, index)} 
+                                            placeholder="Solo números" 
+                                            required
+                                            className={`w-full p-2.5 border rounded-lg text-sm bg-white font-bold tracking-widest ${(hasDniLocalError || hasDniDbError) ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : ''}`} 
+                                        />
 
-                                        {/* ALERTA FLOTANTE DNI */}
-                                        {dnisDuplicados.includes(index) && (
+                                        {hasDniDbError && !hasDniLocalError && (
                                             <div className="absolute top-[-30px] left-0 bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce">
-                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI ya inscrito en el sistema
+                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI ya en Base de Datos
                                                 <div className="absolute -bottom-1 left-4 w-2 h-2 bg-red-600 rotate-45"></div>
+                                            </div>
+                                        )}
+                                        {hasDniLocalError && (
+                                            <div className="absolute top-[-30px] left-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce whitespace-nowrap">
+                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI duplicado en este formulario
+                                                <div className="absolute -bottom-1 left-4 w-2 h-2 bg-orange-500 rotate-45"></div>
                                             </div>
                                         )}
                                     </div>
@@ -317,7 +402,7 @@ export default function FormInscripcion({
                                     <div className="md:col-span-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nivel / Grado</label>
                                         <div className="flex space-x-2">
-                                            <select {...register(`alumnos.${index}.nivel`)} className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`}>
+                                            <select {...register(`alumnos.${index}.nivel`)} className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`} tabIndex={nivelFijo ? -1 : 0}>
                                                 {nivelFijo ? <option value={nivelFijo}>{nivelFijo}</option> : <><option value="INICIAL">INICIAL</option><option value="PRIMARIA">PRIMARIA</option><option value="SECUNDARIA">SECUNDARIA</option></>}
                                             </select>
                                             <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700" required>
@@ -327,10 +412,14 @@ export default function FormInscripcion({
                                     </div>
 
                                     <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        {/* AHORA SON EDITABLES */}
                                         <div className="md:col-span-1">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo Colegio</label>
-                                            <select {...register(`alumnos.${index}.tipoColegio`)} className="w-full p-2.5 border rounded-lg text-sm bg-white text-gray-700 font-bold focus:ring-2 focus:ring-blue-500">
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo Colegio (No editable)</label>
+                                            <select 
+                                                {...register(`alumnos.${index}.tipoColegio`)} 
+                                                value={userTipoColegio}
+                                                className="w-full p-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 font-bold pointer-events-none focus:outline-none"
+                                                tabIndex={-1}
+                                            >
                                                 <option value="ESTATAL">Estatal Nacional</option>
                                                 <option value="PARTICULAR">Particular Privado</option>
                                                 <option value="LIBRE">Alumno Libre</option>
@@ -340,7 +429,13 @@ export default function FormInscripcion({
                                             <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nombre Institución</label>
                                             <div className="flex items-center relative">
                                                 <Building2 className="w-4 h-4 text-gray-400 absolute ml-3" />
-                                                <input {...register(`alumnos.${index}.institucion`)} placeholder="Nombre del Colegio" className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-white text-gray-700 uppercase font-bold focus:ring-2 focus:ring-blue-500" required />
+                                                <input 
+                                                    {...register(`alumnos.${index}.institucion`)} 
+                                                    value={userInstitucion}
+                                                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 uppercase font-bold pointer-events-none" 
+                                                    tabIndex={-1}
+                                                    readOnly 
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -361,7 +456,6 @@ export default function FormInscripcion({
                 </div>
             </div>
 
-            {/* --- SECCIÓN 3: PAGOS PARCIALES Y RESUMEN --- */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-gray-100 space-y-6">
                     <div className="flex justify-between items-center border-b pb-4">
@@ -371,65 +465,80 @@ export default function FormInscripcion({
                         </button>
                     </div>
 
-                    {totalFinal > 0 && pagosFields.map((field, index) => (
-                        <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-5 border border-gray-200 rounded-xl relative bg-white shadow-sm">
-                            {pagosFields.length > 1 && (
-                                <button type="button" onClick={() => { removePago(index); setVouchersFiles(prev => { const c = { ...prev }; delete c[index]; return c }) }} className="absolute -top-3 -right-3 bg-red-100 text-red-600 p-1.5 rounded-full shadow-sm"><Trash2 className="w-4 h-4" /></button>
-                            )}
+                    {totalFinal > 0 && pagosFields.map((field, index) => {
+                        const hasOpLocalError = opsDuplicadasLocal.includes(index);
+                        const hasOpDbError = opsDuplicadasDB.includes(index);
 
-                            <div className="md:col-span-3">
-                                <label className="text-xs font-bold text-gray-500">Método de Pago</label>
-                                <select {...register(`pagos.${index}.metodo`)} className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-bold">
-                                    <option value="YAPE">Yape</option><option value="PLIN">Plin</option><option value="TRANSFERENCIA">Transferencia / Depósito</option><option value="EFECTIVO">Efectivo (en Caja)</option>
-                                </select>
-                            </div>
+                        return (
+                            <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-5 border border-gray-200 rounded-xl relative bg-white shadow-sm">
+                                {pagosFields.length > 1 && (
+                                    <button type="button" onClick={() => { removePago(index); setVouchersFiles(prev => { const c = { ...prev }; delete c[index]; return c }) }} className="absolute -top-3 -right-3 bg-red-100 text-red-600 p-1.5 rounded-full shadow-sm"><Trash2 className="w-4 h-4" /></button>
+                                )}
 
-                            <div className="md:col-span-3">
-                                <label className="text-xs font-bold text-gray-500">Monto Abonado (S/)</label>
-                                <input type="number" step="0.01" {...register(`pagos.${index}.monto`)} required placeholder="Ej: 300.00" className="w-full p-2.5 border rounded-lg bg-blue-50 mt-1 text-sm font-black text-blue-700 focus:ring-blue-500" />
-                            </div>
+                                <div className="md:col-span-3">
+                                    <label className="text-xs font-bold text-gray-500">Método de Pago</label>
+                                    <select {...register(`pagos.${index}.metodo`)} className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-bold">
+                                        <option value="YAPE">Yape</option><option value="PLIN">Plin</option><option value="TRANSFERENCIA">Transferencia / Depósito</option><option value="EFECTIVO">Efectivo (en Caja)</option>
+                                    </select>
+                                </div>
 
-                            <div className="md:col-span-6 relative">
-                                <label className="text-xs font-bold text-gray-500">Fecha y Hora (Perú)</label>
-                                <input type="datetime-local" {...register(`pagos.${index}.fechaHoraPago`)} required className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-medium" />
-                            </div>
+                                <div className="md:col-span-3">
+                                    <label className="text-xs font-bold text-gray-500">Monto Abonado (S/)</label>
+                                    <input type="number" step="0.01" {...register(`pagos.${index}.monto`)} required placeholder="Ej: 300.00" className="w-full p-2.5 border rounded-lg bg-blue-50 mt-1 text-sm font-black text-blue-700 focus:ring-blue-500" />
+                                </div>
 
-                            {pagosWatch[index]?.metodo !== "EFECTIVO" && (
-                                <>
-                                    <div className="md:col-span-6 relative">
-                                        <label className="text-xs font-bold text-gray-500">Nro de Operación / Referencia</label>
-                                        <input {...register(`pagos.${index}.numeroOperacion`)} onBlur={(e) => verificarNumeroOperacion(e.target.value, index)} required placeholder="Ej: 054879" className={`w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm ${opsDuplicadas.includes(index) ? 'border-red-500 focus:ring-red-500' : ''}`} />
+                                <div className="md:col-span-6 relative">
+                                    <label className="text-xs font-bold text-gray-500">Fecha y Hora (Perú)</label>
+                                    <input type="datetime-local" {...register(`pagos.${index}.fechaHoraPago`)} required className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-medium" />
+                                </div>
 
-                                        {/* ALERTA FLOTANTE OPERACIÓN */}
-                                        {opsDuplicadas.includes(index) && (
-                                            <div className="absolute top-[10px] right-0 bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce">
-                                                <AlertCircle className="w-3 h-3 mr-1" /> Ya registrado
-                                                <div className="absolute top-3 -right-1 w-2 h-2 bg-red-600 rotate-45"></div>
-                                            </div>
-                                        )}
-                                    </div>
-                                    <div className="md:col-span-6">
-                                        <label className="text-xs font-bold text-gray-500">Foto del Voucher (Requerido)</label>
-                                        <div className="relative border-2 border-dashed border-gray-300 rounded-lg h-[46px] mt-1 flex items-center justify-center bg-gray-50 overflow-hidden cursor-pointer hover:bg-gray-100 transition">
-                                            {vouchersFiles[index] ? (
-                                                <div className="flex items-center justify-between w-full px-3">
-                                                    <span className="text-xs text-green-700 font-bold flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Imagen OK</span>
-                                                    <img src={vouchersFiles[index].preview} alt="preview" className="h-8 w-8 object-cover rounded shadow-sm" />
+                                {pagosWatch[index]?.metodo !== "EFECTIVO" && (
+                                    <>
+                                        <div className="md:col-span-6 relative">
+                                            <label className="text-xs font-bold text-gray-500">Nro de Operación / Referencia</label>
+                                            <input 
+                                                {...register(`pagos.${index}.numeroOperacion`)} 
+                                                onBlur={(e) => verificarOperacionEnBaseDatos(e.target.value, index)}
+                                                required 
+                                                placeholder="Ej: 054879" 
+                                                className={`w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm ${(hasOpLocalError || hasOpDbError) ? 'border-red-500 focus:ring-red-500 text-red-600 font-bold' : ''}`} 
+                                            />
+
+                                            {hasOpDbError && !hasOpLocalError && (
+                                                <div className="absolute top-[10px] right-0 bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce">
+                                                    <AlertCircle className="w-3 h-3 mr-1" /> Operación ya registrada (DB)
+                                                    <div className="absolute top-3 -right-1 w-2 h-2 bg-red-600 rotate-45"></div>
                                                 </div>
-                                            ) : (
-                                                <span className="text-xs text-gray-400 font-bold flex items-center"><ImageIcon className="w-4 h-4 mr-2" /> Clic para subir foto</span>
                                             )}
-                                            <input type="file" accept="image/*" onChange={(e) => handleVoucherChange(index, e)} required className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                            {hasOpLocalError && (
+                                                <div className="absolute top-[10px] right-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce whitespace-nowrap">
+                                                    <AlertCircle className="w-3 h-3 mr-1" /> Operación duplicada aquí
+                                                    <div className="absolute top-3 -right-1 w-2 h-2 bg-orange-500 rotate-45"></div>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-                    ))}
+                                        <div className="md:col-span-6">
+                                            <label className="text-xs font-bold text-gray-500">Foto del Voucher (Requerido)</label>
+                                            <div className="relative border-2 border-dashed border-gray-300 rounded-lg h-[46px] mt-1 flex items-center justify-center bg-gray-50 overflow-hidden cursor-pointer hover:bg-gray-100 transition">
+                                                {vouchersFiles[index] ? (
+                                                    <div className="flex items-center justify-between w-full px-3">
+                                                        <span className="text-xs text-green-700 font-bold flex items-center"><CheckCircle className="w-4 h-4 mr-1" /> Imagen OK</span>
+                                                        <img src={vouchersFiles[index].preview} alt="preview" className="h-8 w-8 object-cover rounded shadow-sm" />
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 font-bold flex items-center"><ImageIcon className="w-4 h-4 mr-2" /> Clic para subir foto</span>
+                                                )}
+                                                <input type="file" accept="image/*" onChange={(e) => handleVoucherChange(index, e)} required className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )
+                    })}
                     {totalFinal === 0 && <p className="text-sm text-green-600 font-bold p-4 bg-green-50 rounded-lg flex items-center"><CheckCircle className="w-5 h-5 mr-2" /> El total está cubierto por el cupón. No se requieren pagos adicionales.</p>}
                 </div>
 
-                {/* --- ZONA LATERAL: RESUMEN Y CUPONES --- */}
                 <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white space-y-6">
                     <h3 className="font-bold flex items-center text-lg"><Calculator className="w-6 h-6 mr-2" /> Resumen de Cuenta</h3>
 
@@ -467,7 +576,11 @@ export default function FormInscripcion({
                     {diferencia > 0 && <p className="text-sm text-amber-300 font-bold text-center mt-2 flex justify-center items-center"><AlertCircle className="w-4 h-4 mr-1" /> Falta abonar: S/ {diferencia.toFixed(2)}</p>}
                     {diferencia < 0 && <p className="text-sm text-red-300 font-bold text-center mt-2 flex justify-center items-center"><AlertCircle className="w-4 h-4 mr-1" /> Exceso de abono: S/ {Math.abs(diferencia).toFixed(2)}</p>}
 
-                    <button type="submit" disabled={loading || alumnosWatch.length === 0 || dnisDuplicados.length > 0 || opsDuplicadas.length > 0 || (totalFinal > 0 && diferencia !== 0)} className="w-full bg-white text-blue-600 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-gray-50 transition disabled:bg-blue-400 disabled:text-blue-200 disabled:shadow-none disabled:cursor-not-allowed">
+                    <button 
+                        type="submit" 
+                        disabled={isBotonBloqueado} 
+                        className="w-full bg-white text-blue-600 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-gray-50 transition disabled:bg-blue-400 disabled:text-blue-200 disabled:shadow-none disabled:cursor-not-allowed"
+                    >
                         {loading ? "Procesando Operación..." : "Finalizar Inscripción y Pagar"}
                     </button>
                 </div>

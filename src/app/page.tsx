@@ -564,7 +564,7 @@ export default function Home() {
             <div className="aspect-video bg-gray-100 rounded-2xl mb-10 flex items-center justify-center border border-dashed border-gray-300 overflow-hidden">
               <div className="text-center">
                 <p className="font-medium text-gray-500">QR YAPE / PLIN</p>
-                <p className="text-xs text-gray-400 mt-2">Reemplaza esta zona con tu imagen real (/public/cuentas-pago.jpg)</p>
+                <p className="text-xs text-gray-400 mt-2">(/public/yape-plin.jpg)</p>
               </div>
             </div>
 
@@ -572,7 +572,7 @@ export default function Home() {
               <div>
                 <p className="font-bold text-emerald-600 mb-1">YAPE / PLIN</p>
                 <p className="font-mono text-3xl tracking-wider">925 904 377</p>
-                <p className="text-center text-sm text-gray-500 mt-1">A nombre de: Riveros Conozco Josué</p>
+                <p className="text-center text-sm text-gray-500 mt-1">A nombre de: Josue Riveros Conozco</p>
               </div>
               <div>
                 <p className="font-bold text-blue-600 mb-1">BCP Soles</p>
