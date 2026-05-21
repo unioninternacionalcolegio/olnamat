@@ -30,7 +30,7 @@ export default async function ListaInicialPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-black text-blue-800">Lista de Inscritos - Nivel Inicial</h1>
+                <h1 className="text-2xl font-black text-blue-800">Lista de Inscritos - Nivel Secundaria</h1>
                 <p className="text-gray-500 text-sm">Registro completo de todos tus estudiantes matriculados en este nivel.</p>
             </div>
 
@@ -51,7 +51,7 @@ export default async function ListaInicialPage() {
                                         Total: {alumnosEnGrado.length}
                                     </span>
                                 </div>
-                                
+
                                 {/* Tabla */}
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-left text-sm text-gray-600">

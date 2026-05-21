@@ -107,10 +107,7 @@ export default function LoginPage() {
                     </div>
                     <div className="text-center mt-4">
                         <p className="text-sm text-gray-600">
-                            ¿No tienes cuenta?{' '}
-                            <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">
-                                Regístrate aquí
-                            </Link>
+                            ¿No tienes cuenta? Comunícate al WhatsApp<a href="https://wa.me/51925904377"> 925904377</a>{' '}
                         </p>
                     </div>
                 </form>

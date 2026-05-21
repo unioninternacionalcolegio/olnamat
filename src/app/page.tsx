@@ -1,3 +1,4 @@
+//app
 "use client"
 import Link from "next/link"
 import { useState, useEffect } from "react"
@@ -97,7 +98,7 @@ export default function Home() {
               href="/login"
               className="px-5 sm:px-6 py-2.5 bg-gradient-to-r from-blue-700 to-blue-600 text-white font-bold rounded-2xl hover:brightness-110 transition-all shadow-lg shadow-blue-500/30 active:scale-95 text-sm sm:text-base"
             >
-              Ingresar
+              Ingresar Delegado
             </Link>
 
             <button
@@ -203,59 +204,59 @@ export default function Home() {
       </section>
 
       {/* INFORMACIÓN RÁPIDA */}
-<section className="py-20 bg-white">
-  <div className="max-w-6xl mx-auto px-6">
-    <div className="text-center mb-16">
-      <h2 className="text-4xl font-black tracking-tight mb-4">Información General</h2>
-      <p className="text-gray-600 text-lg">OLNAMAT Edición 2026</p>
-    </div>
-
-    <div className="grid md:grid-cols-3 gap-8">
-      {/* Lugar */}
-      <a
-        href="https://www.google.com/maps/search/?api=1&query=Colegio+UNION+INTERNACIONAL+Chilca+Huancayo+Junin"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block group"
-      >
-        <div className="bg-white border border-gray-100 hover:border-indigo-200 rounded-3xl p-10 text-center transition-all hover:shadow-xl cursor-pointer">
-          <div className="w-16 h-16 mx-auto mb-6 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-            <MapPin className="w-9 h-9 text-indigo-600" />
+      <section className="py-20 bg-white">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-black tracking-tight mb-4">Información General</h2>
+            <p className="text-gray-600 text-lg">OLNAMAT Edición 2026</p>
           </div>
-          <h3 className="font-bold text-2xl mb-3 text-gray-900">Lugar</h3>
-          <p className="text-gray-600 text-lg leading-relaxed">
-            Colegio UNION INTERNACIONAL<br />
-            Chilca, Huancayo, Junín
-          </p>
-        </div>
-      </a>
 
-      {/* Fecha */}
-      <div className="group bg-white border border-gray-100 hover:border-indigo-200 rounded-3xl p-10 text-center transition-all hover:shadow-xl">
-        <div className="w-16 h-16 mx-auto mb-6 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-          <Calendar className="w-9 h-9 text-indigo-600" />
-        </div>
-        <h3 className="font-bold text-2xl mb-3 text-gray-900">Fecha</h3>
-        <p className="text-gray-600 text-lg leading-relaxed">
-          Sábado 13 de Junio de 2026
-        </p>
-      </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Lugar */}
+            <a
+              href="https://www.google.com/maps/search/?api=1&query=Colegio+UNION+INTERNACIONAL+Chilca+Huancayo+Junin"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block group"
+            >
+              <div className="bg-white border border-gray-100 hover:border-indigo-200 rounded-3xl p-10 text-center transition-all hover:shadow-xl cursor-pointer">
+                <div className="w-16 h-16 mx-auto mb-6 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                  <MapPin className="w-9 h-9 text-indigo-600" />
+                </div>
+                <h3 className="font-bold text-2xl mb-3 text-gray-900">Lugar</h3>
+                <p className="text-gray-600 text-lg leading-relaxed">
+                  Colegio UNION INTERNACIONAL<br />
+                  Chilca, Huancayo, Junín
+                </p>
+              </div>
+            </a>
 
-      {/* Categorías */}
-      <div className="group bg-white border border-gray-100 hover:border-indigo-200 rounded-3xl p-10 text-center transition-all hover:shadow-xl">
-        <div className="w-16 h-16 mx-auto mb-6 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-          <Trophy className="w-9 h-9 text-indigo-600" />
+            {/* Fecha */}
+            <div className="group bg-white border border-gray-100 hover:border-indigo-200 rounded-3xl p-10 text-center transition-all hover:shadow-xl">
+              <div className="w-16 h-16 mx-auto mb-6 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                <Calendar className="w-9 h-9 text-indigo-600" />
+              </div>
+              <h3 className="font-bold text-2xl mb-3 text-gray-900">Fecha</h3>
+              <p className="text-gray-600 text-lg leading-relaxed">
+                Sábado 13 de Junio de 2026
+              </p>
+            </div>
+
+            {/* Categorías */}
+            <div className="group bg-white border border-gray-100 hover:border-indigo-200 rounded-3xl p-10 text-center transition-all hover:shadow-xl">
+              <div className="w-16 h-16 mx-auto mb-6 bg-indigo-50 rounded-2xl flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                <Trophy className="w-9 h-9 text-indigo-600" />
+              </div>
+              <h3 className="font-bold text-2xl mb-3 text-gray-900">Categorías</h3>
+              <p className="text-gray-600 text-lg leading-relaxed">
+                Nivel Inicial (3, 4 y 5 años)<br />
+                Primaria (1° a 6°)<br />
+                Secundaria (1° a 5°)
+              </p>
+            </div>
+          </div>
         </div>
-        <h3 className="font-bold text-2xl mb-3 text-gray-900">Categorías</h3>
-        <p className="text-gray-600 text-lg leading-relaxed">
-          Nivel Inicial (3, 4 y 5 años)<br />
-          Primaria (1° a 6°)<br />
-          Secundaria (1° a 5°)
-        </p>
-      </div>
-    </div>
-  </div>
-</section>
+      </section>
 
       {/* TEMARIO */}
       <section id="temario" className="py-24 bg-gradient-to-b from-gray-50 to-white">
@@ -264,11 +265,11 @@ export default function Home() {
             <div className="inline-block bg-indigo-100 text-indigo-700 text-sm font-bold px-6 py-2 rounded-full mb-4">OFICIAL 2026</div>
             <h2 className="text-5xl font-black mb-4 tracking-tight">Cuadro de Preguntas</h2>
             <p className="text-xl text-gray-600 max-w-md mx-auto mb-8">Contenidos diseñados para cada nivel educativo</p>
-            
+
             {/* NUEVO BOTÓN PARA VER TEMARIO EN DRIVE */}
-            <a 
-              href="https://drive.google.com/drive/folders/12oTaltn7fs7Qn0zo8q0HxkJzwY4d4-h5?fbclid=IwY2xjawR5qyVleHRuA2FlbQIxMABicmlkETFDTmVhN25pZkZERzBHSW50c3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHigWtsGI3gXdhEZM0OB9bjrq5ONlWfP425bIqgSpHQSK61TTXvmEYi7TfVMM_aem_ebPS-au3Ws9SAFaD0uWZ6A" 
-              target="_blank" 
+            <a
+              href="https://drive.google.com/drive/folders/12oTaltn7fs7Qn0zo8q0HxkJzwY4d4-h5?fbclid=IwY2xjawR5qyVleHRuA2FlbQIxMABicmlkETFDTmVhN25pZkZERzBHSW50c3J0YwZhcHBfaWQQMjIyMDM5MTc4ODIwMDg5MgABHigWtsGI3gXdhEZM0OB9bjrq5ONlWfP425bIqgSpHQSK61TTXvmEYi7TfVMM_aem_ebPS-au3Ws9SAFaD0uWZ6A"
+              target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold rounded-2xl hover:brightness-110 shadow-lg shadow-indigo-500/30 transition-all active:scale-95"
             >
@@ -562,10 +563,11 @@ export default function Home() {
             <h3 className="text-3xl font-black text-center mb-10">Métodos de Pago</h3>
 
             <div className="aspect-video bg-gray-100 rounded-2xl mb-10 flex items-center justify-center border border-dashed border-gray-300 overflow-hidden">
-              <div className="text-center">
-                <p className="font-medium text-gray-500">QR YAPE / PLIN</p>
-                <p className="text-xs text-gray-400 mt-2">(/public/yape-plin.jpg)</p>
-              </div>
+              <img
+                src="/yape-plin.jpg"
+                alt="QR Yape Plin"
+                className="w-full h-full object-contain"
+              />
             </div>
 
             <div className="space-y-8">
@@ -584,7 +586,7 @@ export default function Home() {
               </div>
             </div>
 
-            <p className="text-center text-sm text-gray-500 mt-10">A nombre de: Riveros Conozco Josué</p>
+            <p className="text-center text-sm text-gray-500 mt-10">A nombre de: Josue Riveros Conozco</p>
           </div>
         </div>
       )}

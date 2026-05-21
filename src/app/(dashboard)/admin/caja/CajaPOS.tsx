@@ -1,3 +1,4 @@
+//app/(dashboard)/admin/caja/CajaPOS.tsx
 "use client"
 
 import { useState, useMemo, useEffect } from "react"
@@ -46,18 +47,18 @@ export default function CajaPOS({
     cajeroId?: string
 }) {
     const router = useRouter()
-    
+
     const safeConfiguraciones = Array.isArray(configuraciones) ? configuraciones : []
     const safeClientes = Array.isArray(clientes) ? clientes : []
 
     const [clientesList, setClientesList] = useState<Cliente[]>(safeClientes)
     const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState("")
-    
+
     // AÑADIDO: Inicializamos con la fecha y hora actuales
     const [pagosParciales, setPagosParciales] = useState<PagoParcial[]>([
-        { 
-            metodo: "EFECTIVO", 
-            monto: 0, 
+        {
+            metodo: "EFECTIVO",
+            monto: 0,
             numeroOperacion: "",
             fecha: new Date().toISOString().split('T')[0],
             hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
@@ -72,7 +73,7 @@ export default function CajaPOS({
     const [faseVentaActiva, setFaseVentaActiva] = useState<"REGULAR" | "EXTEMPORANEO">("REGULAR")
 
     const [mostrarRegistroRapido, setMostrarRegistroRapido] = useState(false)
-    const [mostrarCuposRapidos, setMostrarCuposRapidos] = useState(false) 
+    const [mostrarCuposRapidos, setMostrarCuposRapidos] = useState(false)
 
     const [descuentoManual, setDescuentoManual] = useState<number>(0)
 
@@ -235,11 +236,11 @@ export default function CajaPOS({
                 institucion: instFinal,
                 tipoColegio: tipoColegioActivo,
                 role: "LIBRE",
-                celular: nuevoLibre.celular 
+                celular: nuevoLibre.celular
             }
 
             setClientesList([...clientesList, nuevoUser])
-            
+
             if (!clienteSeleccionadoId) {
                 setClienteSeleccionadoId(data.user.id)
                 setBusquedaDelegado(`${nuevoUser.name} (${nuevoUser.dni})`)
@@ -253,7 +254,7 @@ export default function CajaPOS({
 
             setNuevoLibre({ ...nuevoLibre, dni: "", nombres: "", apellidos: "" })
             alert(`Estudiante ${nuevoLibre.nombres} agregado al carrito. Puedes registrar otro si deseas.`)
-            
+
         } catch (error: any) {
             alert(error.message)
         } finally {
@@ -328,7 +329,7 @@ export default function CajaPOS({
                     cajeroId,
                     clienteId: clienteSeleccionadoId,
                     items: carrito,
-                    pagosParciales: pagosFormateados, 
+                    pagosParciales: pagosFormateados,
                     montoTotal: total,
                     descuento: descuentoManual,
                     subtotal: subtotal
@@ -340,9 +341,9 @@ export default function CajaPOS({
             setTicketVendido(data.ticket)
             setCarrito([])
             setDescuentoManual(0)
-            setPagosParciales([{ 
-                metodo: "EFECTIVO", 
-                monto: 0, 
+            setPagosParciales([{
+                metodo: "EFECTIVO",
+                monto: 0,
                 numeroOperacion: "",
                 fecha: new Date().toISOString().split('T')[0],
                 hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
@@ -602,7 +603,7 @@ export default function CajaPOS({
                             <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest">Cupos Rápidos (Cantidades libres)</h3>
                             {mostrarCuposRapidos ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
                         </div>
-                        
+
                         {mostrarCuposRapidos && (
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                                 {["INICIAL", "PRIMARIA", "SECUNDARIA"].map((nivel) => (
@@ -666,7 +667,7 @@ export default function CajaPOS({
                 </div>
 
                 <div className="p-8 bg-gray-800 text-white space-y-4">
-                    
+
                     <div className="space-y-3 bg-gray-700/50 p-4 rounded-2xl border border-gray-600">
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-black uppercase text-gray-300">Métodos de Pago</span>
@@ -687,12 +688,12 @@ export default function CajaPOS({
                                     </select>
                                     <div className="relative w-28">
                                         <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">S/</span>
-                                        <input 
-                                            type="number" 
+                                        <input
+                                            type="number"
                                             step="0.50"
-                                            value={pago.monto === 0 ? "" : pago.monto} 
-                                            onChange={(e) => actualizarPagoParcial(index, 'monto', Number(e.target.value))} 
-                                            className="w-full pl-6 p-2 bg-gray-600 border border-gray-500 rounded-xl text-xs font-bold text-white" 
+                                            value={pago.monto === 0 ? "" : pago.monto}
+                                            onChange={(e) => actualizarPagoParcial(index, 'monto', Number(e.target.value))}
+                                            className="w-full pl-6 p-2 bg-gray-600 border border-gray-500 rounded-xl text-xs font-bold text-white"
                                         />
                                     </div>
                                     {pagosParciales.length > 1 && (
@@ -701,28 +702,28 @@ export default function CajaPOS({
                                         </button>
                                     )}
                                 </div>
-                                
+
                                 {/* AÑADIDO: Campos de N° Operación, Fecha y Hora si no es EFECTIVO */}
                                 {pago.metodo !== "EFECTIVO" && (
                                     <div className="space-y-2 mt-2">
-                                        <input 
-                                            placeholder="N° Operación (Oblig)" 
-                                            value={pago.numeroOperacion} 
-                                            onChange={(e) => actualizarPagoParcial(index, 'numeroOperacion', e.target.value)} 
-                                            className="w-full p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white placeholder-gray-400" 
+                                        <input
+                                            placeholder="N° Operación (Oblig)"
+                                            value={pago.numeroOperacion}
+                                            onChange={(e) => actualizarPagoParcial(index, 'numeroOperacion', e.target.value)}
+                                            className="w-full p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white placeholder-gray-400"
                                         />
                                         <div className="flex gap-2">
-                                            <input 
-                                                type="date" 
-                                                value={pago.fecha} 
-                                                onChange={(e) => actualizarPagoParcial(index, 'fecha', e.target.value)} 
-                                                className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white" 
+                                            <input
+                                                type="date"
+                                                value={pago.fecha}
+                                                onChange={(e) => actualizarPagoParcial(index, 'fecha', e.target.value)}
+                                                className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white"
                                             />
-                                            <input 
-                                                type="time" 
-                                                value={pago.hora} 
-                                                onChange={(e) => actualizarPagoParcial(index, 'hora', e.target.value)} 
-                                                className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white" 
+                                            <input
+                                                type="time"
+                                                value={pago.hora}
+                                                onChange={(e) => actualizarPagoParcial(index, 'hora', e.target.value)}
+                                                className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white"
                                             />
                                         </div>
                                     </div>
@@ -730,10 +731,10 @@ export default function CajaPOS({
                             </div>
                         ))}
 
-                        <button 
-                            onClick={() => setPagosParciales([...pagosParciales, { 
-                                metodo: "YAPE", 
-                                monto: saldoRestante > 0 ? saldoRestante : 0, 
+                        <button
+                            onClick={() => setPagosParciales([...pagosParciales, {
+                                metodo: "YAPE",
+                                monto: saldoRestante > 0 ? saldoRestante : 0,
                                 numeroOperacion: "",
                                 fecha: new Date().toISOString().split('T')[0],
                                 hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
@@ -778,9 +779,9 @@ export default function CajaPOS({
                         </div>
                     </div>
 
-                    <button 
-                        onClick={procesarVenta} 
-                        disabled={carrito.length === 0 || !clienteSeleccionadoId || loading || Math.abs(totalPagos - total) > 0.01} 
+                    <button
+                        onClick={procesarVenta}
+                        disabled={carrito.length === 0 || !clienteSeleccionadoId || loading || Math.abs(totalPagos - total) > 0.01}
                         className="w-full bg-blue-600 py-4 rounded-2xl font-black uppercase text-sm shadow-xl shadow-blue-900/50 hover:bg-blue-500 disabled:bg-gray-600 disabled:shadow-none transition-all"
                     >
                         {loading ? "Procesando..." : "Cobrar"}

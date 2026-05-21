@@ -27,8 +27,8 @@ export default async function InscribirLibrePage() {
 
             <FormInscripcion
                 precios={configuraciones}
-                userInstitucion={"ALUMNO LIBRE"}
-                userTipoColegio={"LIBRE"} // <-- CORRECCIÓN: Tiene que ser exactamente "LIBRE" (el valor del Enum)
+                userInstitucion={delegado?.institucion || "INDEPENDIENTE"}
+                userTipoColegio={`LIBRE - ${delegado?.tipoColegio || "PARTICULAR"}`}
             />
         </div>
     )
