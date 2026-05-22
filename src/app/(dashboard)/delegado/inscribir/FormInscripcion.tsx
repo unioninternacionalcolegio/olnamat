@@ -43,11 +43,11 @@ export default function FormInscripcion({
     const [loading, setLoading] = useState(false)
 
     // ESTADOS DE VALIDACIÓN VISUAL (Para UX)
-    const [dnisDuplicadosDB, setDnisDuplicadosDB] = useState<number[]>([]) 
-    const [dnisDuplicadosLocal, setDnisDuplicadosLocal] = useState<number[]>([]) 
-    const [opsDuplicadasDB, setOpsDuplicadasDB] = useState<number[]>([]) 
-    const [opsDuplicadasLocal, setOpsDuplicadasLocal] = useState<number[]>([]) 
-    
+    const [dnisDuplicadosDB, setDnisDuplicadosDB] = useState<number[]>([])
+    const [dnisDuplicadosLocal, setDnisDuplicadosLocal] = useState<number[]>([])
+    const [opsDuplicadasDB, setOpsDuplicadasDB] = useState<number[]>([])
+    const [opsDuplicadasLocal, setOpsDuplicadasLocal] = useState<number[]>([])
+
     const [vouchersFiles, setVouchersFiles] = useState<Record<number, { file: File, preview: string }>>({})
 
     const [codigoCuponInput, setCodigoCuponInput] = useState("")
@@ -99,9 +99,22 @@ export default function FormInscripcion({
         setOpsDuplicadasLocal(duplicadas);
     }, [pagosWatch]);
 
+    // ---> VALIDAR TARIFAS 0.00 O CONFIG NO ENCONTRADA EN TIEMPO REAL
+    const hasInvalidConfigs = alumnosWatch.some((alum: any) => {
+        const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad);
+        if (!config) return true; // Inválido si no existe
+
+        let costo = config.costoEstatalReg;
+        if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
+        if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
+
+        return costo === 0; // Inválido si la tarifa es exactamente 0.00
+    });
+
     const subTotalPagar = alumnosWatch.reduce((acc, alum) => {
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad)
-        if (!config) return acc + 15;
+        if (!config) return acc; // Si no hay config, suma 0 y salta la alerta del hasInvalidConfigs
+
         let costo = config.costoEstatalReg;
         if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
         if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
@@ -114,13 +127,31 @@ export default function FormInscripcion({
     const totalAbonado = pagosWatch.reduce((acc, p) => acc + (Number(p.monto) || 0), 0)
     const diferencia = totalFinal - totalAbonado
 
+    // ---> IMPORTACIÓN ACUMULATIVA DE EXCEL
     const handleImportedData = (nuevosAlumnos: any[]) => {
-        const alumnosConColegio = nuevosAlumnos.map(alum => ({
-            ...alum, nivel: nivelFijo || alum.nivel || "PRIMARIA",
-            tipoColegio: userTipoColegio,
-            institucion: userInstitucion
-        }))
-        setValue("alumnos", alumnosConColegio)
+        const alumnosConColegio = nuevosAlumnos.map(alum => {
+            const nivelLimpiado = (nivelFijo || alum.nivel || "PRIMARIA") as keyof typeof OPCIONES_GRADOS;
+            const gradoLimpiado = alum.gradoOEdad || OPCIONES_GRADOS[nivelLimpiado][0];
+
+            return {
+                ...alum,
+                nivel: nivelLimpiado,
+                gradoOEdad: gradoLimpiado,
+                tipoColegio: userTipoColegio,
+                institucion: userInstitucion
+            }
+        });
+
+        // Verificamos si la lista actual tiene un solo elemento y está vacío (el que sale por defecto)
+        const isDefaultEmpty = alumnosWatch.length === 1 && !alumnosWatch[0].dni && !alumnosWatch[0].nombres && !alumnosWatch[0].apellidos;
+
+        if (isDefaultEmpty) {
+            // Si está vacío, reemplazamos
+            setValue("alumnos", alumnosConColegio);
+        } else {
+            // Si ya hay datos registrados, AÑADIMOS los de Excel abajo
+            appendAlumno(alumnosConColegio);
+        }
     }
 
     const handleVoucherChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -184,11 +215,18 @@ export default function FormInscripcion({
         if (diferencia !== 0 && totalFinal > 0) return alert(`Los pagos no cuadran. Falta abonar S/ ${diferencia.toFixed(2)}`)
 
         setLoading(true)
-        
+
         try {
             // ==========================================
             // 🛡️ VALIDACIÓN TOTAL (ESCUDO FINAL) 🛡️
             // ==========================================
+
+            // 0. Validar Tarifas 0.00 o Configuraciones Rota
+            if (hasInvalidConfigs) {
+                alert("❌ Tienes alumnos con 'Configuración no encontrada' o con 'Tarifa S/ 0.00'. Por favor corrige el Nivel/Grado de esos estudiantes antes de continuar.");
+                setLoading(false);
+                return;
+            }
 
             // 1. Verificar DNIs duplicados localmente (en el formulario)
             const dnisList = data.alumnos.map((a: any) => a.dni).filter(Boolean);
@@ -232,7 +270,7 @@ export default function FormInscripcion({
                     return;
                 }
             }
-            
+
             // ==========================================
             // SI PASA EL ESCUDO, SUBIMOS LAS IMÁGENES Y PROCESAMOS
             // ==========================================
@@ -262,7 +300,7 @@ export default function FormInscripcion({
                 }
             }))
 
-            const nombreInstitucionFinal = userTipoColegio === 'LIBRE' 
+            const nombreInstitucionFinal = userTipoColegio === 'LIBRE'
                 ? (userInstitucion.startsWith("LIBRE-") ? userInstitucion : `LIBRE-${userInstitucion}`)
                 : userInstitucion;
 
@@ -270,7 +308,7 @@ export default function FormInscripcion({
                 estudiantes: data.alumnos.map((a: any) => ({
                     ...a,
                     tipoColegio: userTipoColegio,
-                    institucion: nombreInstitucionFinal 
+                    institucion: nombreInstitucionFinal
                 })),
                 montoTotal: subTotalPagar,
                 codigoCupon: cuponAplicado?.codigo,
@@ -295,8 +333,8 @@ export default function FormInscripcion({
         }
     }
 
-    // El botón se bloquea si hay errores visuales evidentes
-    const isBotonBloqueado = loading || alumnosWatch.length === 0 || dnisDuplicadosDB.length > 0 || dnisDuplicadosLocal.length > 0 || opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0 || (totalFinal > 0 && diferencia !== 0);
+    // El botón se bloquea si hay errores visuales evidentes O CONFIGURACIONES INVÁLIDAS
+    const isBotonBloqueado = loading || alumnosWatch.length === 0 || hasInvalidConfigs || dnisDuplicadosDB.length > 0 || dnisDuplicadosLocal.length > 0 || opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0 || (totalFinal > 0 && diferencia !== 0);
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
@@ -365,14 +403,14 @@ export default function FormInscripcion({
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 relative">
                                     <div className="md:col-span-1 relative">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">DNI (Obligatorio)</label>
-                                        <input 
-                                            {...register(`alumnos.${index}.dni`)} 
+                                        <input
+                                            {...register(`alumnos.${index}.dni`)}
                                             maxLength={8}
                                             onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/\D/g, '') }}
-                                            onBlur={(e) => verificarDniEnBaseDatos(e.target.value, index)} 
-                                            placeholder="Solo números" 
+                                            onBlur={(e) => verificarDniEnBaseDatos(e.target.value, index)}
+                                            placeholder="Solo números"
                                             required
-                                            className={`w-full p-2.5 border rounded-lg text-sm bg-white font-bold tracking-widest ${(hasDniLocalError || hasDniDbError) ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : ''}`} 
+                                            className={`w-full p-2.5 border rounded-lg text-sm bg-white font-bold tracking-widest ${(hasDniLocalError || hasDniDbError) ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : ''}`}
                                         />
 
                                         {hasDniDbError && !hasDniLocalError && (
@@ -402,7 +440,17 @@ export default function FormInscripcion({
                                     <div className="md:col-span-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nivel / Grado</label>
                                         <div className="flex space-x-2">
-                                            <select {...register(`alumnos.${index}.nivel`)} className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`} tabIndex={nivelFijo ? -1 : 0}>
+                                            {/* AUTO-CAMBIO DE GRADO AL SELECCIONAR NUEVO NIVEL */}
+                                            <select
+                                                {...register(`alumnos.${index}.nivel`, {
+                                                    onChange: (e) => {
+                                                        const nuevoNivel = e.target.value as keyof typeof OPCIONES_GRADOS;
+                                                        setValue(`alumnos.${index}.gradoOEdad`, OPCIONES_GRADOS[nuevoNivel][0]);
+                                                    }
+                                                })}
+                                                className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`}
+                                                tabIndex={nivelFijo ? -1 : 0}
+                                            >
                                                 {nivelFijo ? <option value={nivelFijo}>{nivelFijo}</option> : <><option value="INICIAL">INICIAL</option><option value="PRIMARIA">PRIMARIA</option><option value="SECUNDARIA">SECUNDARIA</option></>}
                                             </select>
                                             <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700" required>
@@ -414,8 +462,8 @@ export default function FormInscripcion({
                                     <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="md:col-span-1">
                                             <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo Colegio (No editable)</label>
-                                            <select 
-                                                {...register(`alumnos.${index}.tipoColegio`)} 
+                                            <select
+                                                {...register(`alumnos.${index}.tipoColegio`)}
                                                 value={userTipoColegio}
                                                 className="w-full p-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 font-bold pointer-events-none focus:outline-none"
                                                 tabIndex={-1}
@@ -429,24 +477,28 @@ export default function FormInscripcion({
                                             <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nombre Institución</label>
                                             <div className="flex items-center relative">
                                                 <Building2 className="w-4 h-4 text-gray-400 absolute ml-3" />
-                                                <input 
-                                                    {...register(`alumnos.${index}.institucion`)} 
+                                                <input
+                                                    {...register(`alumnos.${index}.institucion`)}
                                                     value={userInstitucion}
-                                                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 uppercase font-bold pointer-events-none" 
+                                                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 uppercase font-bold pointer-events-none"
                                                     tabIndex={-1}
-                                                    readOnly 
+                                                    readOnly
                                                 />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <div className="flex flex-col sm:flex-row justify-between items-center bg-white p-3 rounded-lg border border-blue-100 text-sm">
-                                    <div className="flex items-center text-blue-800 font-medium mb-2 sm:mb-0">
-                                        <Clock className="w-4 h-4 mr-2 text-blue-500" />
-                                        {configAlumno ? <span><strong>{configAlumno.turno}</strong> ({configAlumno.horaInicio} - {configAlumno.horaFin})</span> : <span className="text-red-500 italic">Configuración no encontrada</span>}
+                                <div className={`flex flex-col sm:flex-row justify-between items-center p-3 rounded-lg border text-sm ${configAlumno && costoAlumno > 0 ? "bg-white border-blue-100" : "bg-red-50 border-red-200"}`}>
+                                    <div className="flex items-center font-medium mb-2 sm:mb-0">
+                                        <Clock className={`w-4 h-4 mr-2 ${configAlumno && costoAlumno > 0 ? "text-blue-500" : "text-red-500"}`} />
+                                        {configAlumno && costoAlumno > 0 ? (
+                                            <span className="text-blue-800"><strong>{configAlumno.turno}</strong> ({configAlumno.horaInicio} - {configAlumno.horaFin})</span>
+                                        ) : (
+                                            <span className="text-red-600 font-bold">¡Tarifa no configurada para este Grado!</span>
+                                        )}
                                     </div>
-                                    <div className="flex items-center text-green-700 font-bold bg-green-50 px-3 py-1 rounded-full">
+                                    <div className={`flex items-center font-bold px-3 py-1 rounded-full ${configAlumno && costoAlumno > 0 ? "text-green-700 bg-green-50" : "text-red-700 bg-red-100"}`}>
                                         <Ticket className="w-4 h-4 mr-1" /> Tarifa: S/ {costoAlumno.toFixed(2)}
                                     </div>
                                 </div>
@@ -496,12 +548,12 @@ export default function FormInscripcion({
                                     <>
                                         <div className="md:col-span-6 relative">
                                             <label className="text-xs font-bold text-gray-500">Nro de Operación / Referencia</label>
-                                            <input 
-                                                {...register(`pagos.${index}.numeroOperacion`)} 
+                                            <input
+                                                {...register(`pagos.${index}.numeroOperacion`)}
                                                 onBlur={(e) => verificarOperacionEnBaseDatos(e.target.value, index)}
-                                                required 
-                                                placeholder="Ej: 054879" 
-                                                className={`w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm ${(hasOpLocalError || hasOpDbError) ? 'border-red-500 focus:ring-red-500 text-red-600 font-bold' : ''}`} 
+                                                required
+                                                placeholder="Ej: 054879"
+                                                className={`w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm ${(hasOpLocalError || hasOpDbError) ? 'border-red-500 focus:ring-red-500 text-red-600 font-bold' : ''}`}
                                             />
 
                                             {hasOpDbError && !hasOpLocalError && (
@@ -576,9 +628,9 @@ export default function FormInscripcion({
                     {diferencia > 0 && <p className="text-sm text-amber-300 font-bold text-center mt-2 flex justify-center items-center"><AlertCircle className="w-4 h-4 mr-1" /> Falta abonar: S/ {diferencia.toFixed(2)}</p>}
                     {diferencia < 0 && <p className="text-sm text-red-300 font-bold text-center mt-2 flex justify-center items-center"><AlertCircle className="w-4 h-4 mr-1" /> Exceso de abono: S/ {Math.abs(diferencia).toFixed(2)}</p>}
 
-                    <button 
-                        type="submit" 
-                        disabled={isBotonBloqueado} 
+                    <button
+                        type="submit"
+                        disabled={isBotonBloqueado}
                         className="w-full bg-white text-blue-600 py-4 rounded-xl font-black text-lg shadow-xl hover:bg-gray-50 transition disabled:bg-blue-400 disabled:text-blue-200 disabled:shadow-none disabled:cursor-not-allowed"
                     >
                         {loading ? "Procesando Operación..." : "Finalizar Inscripción y Pagar"}
