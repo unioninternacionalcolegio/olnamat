@@ -1,3 +1,4 @@
+//app/(dashboard)/admin/imprimir/page.tsx
 import prisma from "@/lib/prisma"
 import { redirect } from "next/navigation"
 import VistaImpresion from "./VistaImpresion"
@@ -33,10 +34,10 @@ export default async function ImprimirPage({ searchParams }: { searchParams: Pro
         )
     }
 
-    // 4. TRAEMOS LAS CONFIGURACIONES (AQUÍ ESTÁN LOS TURNOS)
+    // 4. TRAEMOS LAS CONFIGURACIONES (AQUÍ ESTÁN LOS TURNOS Y LAS HORAS)
     const configuraciones = await prisma.configuracionConcurso.findMany()
 
-    // 5. LA MAGIA: Le inyectamos el turno a cada estudiante
+    // 5. LA MAGIA: Le inyectamos el turno y la HORA a cada estudiante
     const estudiantesParaImprimir = estudiantes.map(est => {
         // Buscamos la regla de su grado y nivel
         const config = configuraciones.find(
@@ -45,10 +46,11 @@ export default async function ImprimirPage({ searchParams }: { searchParams: Pro
 
         return {
             ...est,
-            turno: config ? config.turno : "Sin Turno" // <-- Se lo pegamos aquí
+            turno: config ? config.turno : "Sin Turno", // <-- Se lo pegamos aquí
+            horaInicio: config ? config.horaInicio : "" // <-- ¡Aquí le inyectamos la hora también!
         }
     })
 
-    // 6. Mandamos los estudiantes ya "vitaminados" con su turno
+    // 6. Mandamos los estudiantes ya "vitaminados" con su turno y hora
     return <VistaImpresion estudiantes={estudiantesParaImprimir} />
 }

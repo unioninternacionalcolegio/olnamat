@@ -133,7 +133,7 @@ model Estudiante {
   gradoOEdad       String
   institucion      String
   localidad        String
-  
+  impresiones Int @default(0)
   estadoRegistro   EstadoRegistro @default(COMPLETO)
 
   // Usuario que lo inscribió

@@ -1,3 +1,4 @@
+//src/components/Carnet.tsx
 "use client"
 
 import Image from "next/image"
@@ -38,12 +39,12 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
 
             {/* CÓDIGO DEL ESTUDIANTE (DNI) - Arriba a la derecha tipo H2 */}
             <div className="absolute top-[8%] right-[5%] font-black text-gray-900 text-xl tracking-widest bg-white/50 px-2 rounded backdrop-blur-sm">
-                N° {estudiante.dni || estudiante.id.substring(0, 8)}
+                COD: {estudiante.dni || estudiante.id.substring(0, 8)}
             </div>
 
-            {/* Turno */}
-            <div className="absolute top-[19%] left-[70%] font-bold text-blue-900 text-[10px] uppercase">
-                {estudiante.turno}
+            {/* Turno y Hora de Inicio */}
+            <div className="absolute top-[18.5%] left-[68.30%] font-bold text-blue-900 text-[12px] uppercase">
+                {estudiante.turno || "TURNO 1"} {estudiante.horaInicio ? `${estudiante.horaInicio}` : ""}
             </div>
 
             {/* Apellidos */}

@@ -1,4 +1,3 @@
-//app\(dashboard)\admin\alumnos\page.tsx
 // app/(dashboard)/admin/alumnos/page.tsx
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
@@ -19,8 +18,6 @@ export default async function AlumnosPage() {
         where: query,
         include: {
             pago: true,
-            // AÑADIDO: Incluimos al creador para obtener su rol y alimentar 
-            // los filtros (Libre, Delegado, Colegio) en el componente cliente.
             creador: {
                 select: {
                     id: true,
@@ -41,7 +38,8 @@ export default async function AlumnosPage() {
                 </div>
             </div>
 
-            <ListaEstudiantes iniciales={estudiantes} />
+            {/* LE PASAMOS EL ROL AL COMPONENTE */}
+            <ListaEstudiantes iniciales={estudiantes} rolUsuario={session?.user.role} />
         </div>
     )
 }

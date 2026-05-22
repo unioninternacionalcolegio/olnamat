@@ -66,7 +66,6 @@ export async function GET(req: Request) {
     }
 }
 
-
 // ==========================================
 // POST: SUBIR O ACTUALIZAR NOTAS
 // ==========================================
