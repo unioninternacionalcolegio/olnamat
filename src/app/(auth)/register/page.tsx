@@ -11,9 +11,9 @@ export default function RegistroLibrePage() {
     const [configuraciones, setConfiguraciones] = useState<any[]>([])
     const [file, setFile] = useState<File | null>(null)
     const [mostrarCuentas, setMostrarCuentas] = useState(false)
-    
-    // NUEVO: Estado para el efecto de "copiado"
-    const [copiado, setCopiado] = useState(false)
+
+    // MODIFICADO: Ahora guarda un string para saber cuál se copió ("yape", "bcp" o "bbva")
+    const [copiado, setCopiado] = useState<string | null>(null)
 
     const [formData, setFormData] = useState({
         dni: "",
@@ -24,8 +24,8 @@ export default function RegistroLibrePage() {
         localidad: "",
         nivel: "PRIMARIA",
         gradoOEdad: "",
-        metodoPago: "YAPE", // <--- NUEVO: Por defecto Yape/Plin
-        numeroOperacion: "", // <--- AHORA SERÁ OBLIGATORIO
+        metodoPago: "YAPE",
+        numeroOperacion: "",
         fechaPago: "",
         horaPago: ""
     })
@@ -45,12 +45,12 @@ export default function RegistroLibrePage() {
         return { fechaPago: fecha, horaPago: hora }
     }
 
-    // NUEVO: Función para manejar la copia del número al portapapeles
-    const manejarCopia = () => {
-        navigator.clipboard.writeText("925904377");
-        setCopiado(true);
+    // MODIFICADO: Función dinámica que recibe el texto a copiar y el ID del banco
+    const manejarCopia = (texto: string, idBanco: string) => {
+        navigator.clipboard.writeText(texto);
+        setCopiado(idBanco);
         setTimeout(() => {
-            setCopiado(false);
+            setCopiado(null);
         }, 2000);
     };
 
@@ -124,7 +124,6 @@ export default function RegistroLibrePage() {
             setLoading(false);
             return;
         }
-        // NUEVA VALIDACIÓN: Obligar número de operación
         if (!formData.numeroOperacion.trim()) {
             setErrorModal(`Es OBLIGATORIO ingresar el N° de Operación de tu ${formData.metodoPago === 'YAPE' ? 'Yape/Plin' : 'Transferencia'}.`);
             setLoading(false);
@@ -223,20 +222,20 @@ export default function RegistroLibrePage() {
                         </div>
 
                         <div className="bg-blue-50 p-4 rounded-2xl space-y-3">
+
+                            {/* YAPE / PLIN */}
                             <div className="border-b border-blue-100 pb-2">
                                 <p className="text-[11px] text-blue-600 font-bold uppercase">Yape / Plin</p>
-                                
-                                {/* NUEVO: Bloque interactivo para copiar */}
                                 <div className="flex items-center gap-2 mt-1">
                                     <p className="font-black text-gray-800 text-lg">925 904 377</p>
-                                    
-                                    <button 
+
+                                    <button
                                         type="button"
-                                        onClick={manejarCopia}
+                                        onClick={() => manejarCopia("925904377", "yape")}
                                         className="p-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors cursor-pointer"
                                         title="Copiar al portapapeles"
                                     >
-                                        {copiado ? (
+                                        {copiado === "yape" ? (
                                             <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                                             </svg>
@@ -247,25 +246,79 @@ export default function RegistroLibrePage() {
                                         )}
                                     </button>
 
-                                    {copiado && (
+                                    {copiado === "yape" && (
                                         <span className="text-[11px] font-bold text-green-600 animate-fade-in">
                                             ¡Copiado!
                                         </span>
                                     )}
                                 </div>
-                                
                                 <p className="text-[10px] text-center text-gray-500 italic mt-2">
                                     A nombre de: JOSUE RIVEROS CONOZCO
                                 </p>
                             </div>
+
+                            {/* BCP */}
                             <div className="border-b border-blue-100 pb-2">
                                 <p className="text-[11px] text-blue-600 font-bold uppercase">BCP Soles</p>
-                                <p className="font-black text-gray-800">123-45678901-2-34</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p className="font-black text-gray-800 text-lg">355-07706069-0-44</p>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => manejarCopia("355-07706069-0-44", "bcp")}
+                                        className="p-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors cursor-pointer"
+                                        title="Copiar al portapapeles"
+                                    >
+                                        {copiado === "bcp" ? (
+                                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                        )}
+                                    </button>
+
+                                    {copiado === "bcp" && (
+                                        <span className="text-[11px] font-bold text-green-600 animate-fade-in">
+                                            ¡Copiado!
+                                        </span>
+                                    )}
+                                </div>
                             </div>
+
+                            {/* BBVA */}
                             <div>
-                                <p className="text-[11px] text-blue-600 font-bold uppercase">BBVA</p>
-                                <p className="font-black text-gray-800">04-123-456789</p>
+                                <p className="text-[11px] text-blue-600 font-bold uppercase">CCI BCP</p>
+                                <div className="flex items-center gap-2 mt-1">
+                                    <p className="font-black text-gray-800 text-lg">0002-35510770606904460</p>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => manejarCopia("0002-35510770606904460", "bbva")}
+                                        className="p-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors cursor-pointer"
+                                        title="Copiar al portapapeles"
+                                    >
+                                        {copiado === "bbva" ? (
+                                            <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                            </svg>
+                                        )}
+                                    </button>
+
+                                    {copiado === "bbva" && (
+                                        <span className="text-[11px] font-bold text-green-600 animate-fade-in">
+                                            ¡Copiado!
+                                        </span>
+                                    )}
+                                </div>
                             </div>
+
                             <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: JOSUE RIVEROS CONOZCO</p>
                         </div>
 
