@@ -43,22 +43,22 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
             </div>
 
             {/* Turno y Hora de Inicio */}
-            <div className="absolute top-[18.5%] left-[68.30%] font-bold text-blue-900 text-[12px] uppercase">
+            <div className="absolute top-[18%] left-[67.8%] font-bold text-blue-900 text-[12px] uppercase">
                 {estudiante.turno || "TURNO 1"} {estudiante.horaInicio ? `${estudiante.horaInicio}` : ""}
             </div>
 
             {/* Apellidos */}
-            <div className="absolute top-[43.5%] left-[30%] w-[40%] font-bold text-gray-900 text-xs truncate uppercase">
+            <div className="absolute top-[43%] left-[29%] w-[50%] font-bold text-gray-900 text-xs truncate uppercase">
                 {estudiante.apellidos}
             </div>
 
             {/* Nombres */}
-            <div className="absolute top-[54.5%] left-[30%] w-[40%] font-bold text-gray-900 text-xs truncate uppercase">
+            <div className="absolute top-[54%] left-[29%] w-[50%] font-bold text-gray-900 text-xs truncate uppercase">
                 {estudiante.nombres}
             </div>
 
             {/* Institución Educativa */}
-            <div className="absolute top-[65%] left-[30%] w-[40%] font-bold text-gray-900 text-[10px] uppercase leading-tight">
+            <div className="absolute top-[64%] left-[29%] w-[50%] font-bold text-gray-900 text-[10px] uppercase leading-tight">
                 {estudiante.institucion}
             </div>
 
