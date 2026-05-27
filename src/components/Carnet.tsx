@@ -15,10 +15,10 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
     // Función para determinar dónde poner la X en el Grado
     const getGradoMarker = (grado: string) => {
         const map: any = {
-            "3 años": "55.5%", "4 años": "51.5%", "5 años": "59.5%",
-            "1er Grado": "43.5%", "2do Grado": "47.5%", "3er Grado": "51.5%",
+            "3 años": "51.5%", "4 años": "55.5%", "5 años": "59.5%",
+            "1er Grado": "43%", "2do Grado": "47%", "3er Grado": "51.5%",
             "4to Grado": "55.5%", "5to Grado": "59.5%", "6to Grado": "65.5%",
-            "1er Año": "43%", "2do Año": "47.5%", "3er Año": "51.5%",
+            "1er Año": "43%", "2do Año": "47%", "3er Año": "51.5%",
             "4to Año": "55.5%", "5to Año": "59.5%"
         }
         return { left: map[grado] || "-10%" }
@@ -39,7 +39,7 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
 
             {/* CÓDIGO DEL ESTUDIANTE (DNI) - Arriba a la derecha tipo H2 */}
             <div className="absolute top-[8%] right-[5%] font-black text-gray-900 text-xl tracking-widest bg-white/50 px-2 rounded backdrop-blur-sm">
-                COD: {estudiante.dni || estudiante.id.substring(0, 8)}
+                CÓD: {estudiante.dni || estudiante.id.substring(0, 8)}
             </div>
 
             {/* Turno y Hora de Inicio */}
@@ -64,7 +64,7 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
 
             {/* Marcador de Nivel (X roja) */}
             <div
-                className="absolute top-[77%] font-black text-red-600 text-lg"
+                className="absolute top-[76.4%] font-black text-red-600 text-lg"
                 style={getNivelMarker(estudiante.nivel)}
             >
                 X
@@ -72,7 +72,7 @@ export default function Carnet({ estudiante }: { estudiante: any }) {
 
             {/* Marcador de Grado (X roja) */}
             <div
-                className="absolute top-[77%] font-black text-red-600 text-lg"
+                className="absolute top-[76.4%] font-black text-red-600 text-lg"
                 style={getGradoMarker(estudiante.gradoOEdad)}
             >
                 X
