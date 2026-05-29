@@ -3,8 +3,8 @@ import type { Metadata } from "next"
 import "./globals.css" // Aquí sí funciona porque están en la misma carpeta
 
 export const metadata: Metadata = {
-  title: "OLNAMAT - Sistema de Gestión",
-  description: "Sistema para el concurso de matemáticas OLNAMAT",
+  title: "OLNAMAT 2026",
+  description: "Sistema para el concurso de matemáticas OLNAMAT 2026",
 }
 
 export default function RootLayout({
