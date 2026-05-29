@@ -50,7 +50,7 @@ type FormularioEstudiante = {
     nivel: string;
     gradoOEdad: string;
     errorDni?: boolean;
-    tipoErrorDni?: "REGISTRADO" | "DUPLICADO"; // <--- Añadido para diferenciar el error
+    tipoErrorDni?: "REGISTRADO" | "DUPLICADO";
 }
 
 export default function CajaPOS({
@@ -134,22 +134,38 @@ export default function CajaPOS({
 
     const obtenerUltimoDni = async () => {
         try {
+            let maxCartNum = 0;
+            carrito.forEach(item => {
+                if (item.estudiantesAgrupados && item.estudiantesAgrupados.length > 0) {
+                    item.estudiantesAgrupados.forEach(est => {
+                        if (est.dni && /^0{4,}\d+$/.test(est.dni)) {
+                            const num = parseInt(est.dni, 10);
+                            if (num > maxCartNum) maxCartNum = num;
+                        }
+                    });
+                }
+            });
+
             const res = await fetch('/api/estudiantes/ultimo-dni-sin-dni')
             const data = await res.json()
-            if (data.nextNum) {
-                setUltimoDniGenerado(data.nextNum)
-                let runningNum = data.nextNum
-                setFormularios(prev => prev.map((f) => {
-                    if (!f.dni.trim() || f.dni.startsWith('0000')) {
-                        const generatedDni = runningNum.toString().padStart(8, '0')
-                        runningNum++
-                        return { ...f, dni: generatedDni, errorDni: false, tipoErrorDni: undefined }
-                    }
-                    return f
-                }))
-            }
+
+            const dbNextNum = data.nextNum || 1;
+
+            const finalStartNum = Math.max(dbNextNum, maxCartNum + 1);
+
+            setUltimoDniGenerado(finalStartNum)
+            let runningNum = finalStartNum
+
+            setFormularios(prev => prev.map((f) => {
+                if (!f.dni.trim() || f.dni.startsWith('0000')) {
+                    const generatedDni = runningNum.toString().padStart(8, '0')
+                    runningNum++
+                    return { ...f, dni: generatedDni, errorDni: false, tipoErrorDni: undefined }
+                }
+                return f
+            }))
         } catch (error) {
-            console.error("Error al obtener el último DNI", error)
+            console.error("Error al obtener el último DNI correlativo", error)
         }
     }
 
@@ -193,11 +209,9 @@ export default function CajaPOS({
         setFormularios(prev => prev.filter(f => f.idLocal !== idLocal))
     }
 
-    // VALIDACIÓN ONBLUR EN VIVO
     const verificarDniFilaIndividual = async (idLocal: string, dni: string) => {
         if (!dni || dni.length < 8 || tipoRegistro === "SIN_DNI") return
 
-        // 1. Detección Local
         const esDuplicadoLocal = formularios.some(f => f.idLocal !== idLocal && f.dni.trim() === dni.trim())
         if (esDuplicadoLocal) {
             setFormularios(prev => prev.map(f => f.idLocal === idLocal ? { ...f, errorDni: true, tipoErrorDni: "DUPLICADO" } : f))
@@ -205,7 +219,6 @@ export default function CajaPOS({
             return
         }
 
-        // 2. Detección en BD
         try {
             const res = await fetch('/api/estudiantes/verificar-dnis', {
                 method: 'POST',
@@ -252,7 +265,6 @@ export default function CajaPOS({
         }
     }
 
-    // EXCEL IMPORT Y VALIDACIÓN
     const procesarImportacionExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
         if (!file) return
@@ -289,7 +301,6 @@ export default function CajaPOS({
 
             const listaCompleta = [...formularios, ...nuevosFormularios]
 
-            // FILTRO 1: DUPLICADOS LOCALES DENTRO DEL EXCEL
             const dnisVistos = new Set<string>()
             const duplicadosLocales = new Set<string>()
 
@@ -317,7 +328,6 @@ export default function CajaPOS({
                 alert(`¡Alerta de Excel! Se detectaron ${duplicadosLocales.size} DNIs repetidos dentro del mismo archivo/formulario (marcados en naranja).`)
             }
 
-            // FILTRO 2: BD PARA LOS QUE NO SON DUPLICADOS LOCALES
             const dnisAValidarDB = nuevosFormularios
                 .map(f => f.dni.trim())
                 .filter(d => d && d.length >= 8 && !d.startsWith('0000') && !duplicadosLocales.has(d))
@@ -344,6 +354,7 @@ export default function CajaPOS({
         reader.readAsBinaryString(file)
     }
 
+    // ==== FUNCIÓN RESTAURADA ====
     const calcularPrecio = (nivel: string, grado: string, tipoCol: string) => {
         const config = safeConfiguraciones.find(c => c.nivel === nivel && c.gradoOEdad === grado)
         if (!config) return { monto: 0, fase: faseVentaActiva }
@@ -360,6 +371,7 @@ export default function CajaPOS({
         }
         return { monto, fase: faseVentaActiva }
     }
+    // ============================
 
     const agregarAlCarritoMasivo = async () => {
         if (modoInscripcion === "DELEGADO" && !clienteActual) return alert("Selecciona un delegado primero.")
@@ -367,7 +379,6 @@ export default function CajaPOS({
         const incompletos = formularios.some(f => !f.dni || !f.nombres || !f.nivel || !f.gradoOEdad)
         if (incompletos) return alert("Hay formularios incompletos. Llena todos los datos de los estudiantes.")
 
-        // BLOQUEO EN EL BOTÓN
         const tieneErroresDni = formularios.some(f => f.errorDni)
         if (tieneErroresDni) {
             return alert("¡No puedes continuar! Hay DNIs duplicados o ya registrados en la lista (revisa los campos naranjas y rojos).")
@@ -867,6 +878,7 @@ export default function CajaPOS({
 
                     <div className="flex justify-between items-center bg-gray-900 p-3 rounded-xl border border-gray-700">
                         <div className="flex items-center text-gray-400"><Tag className="w-4 h-4 mr-2" /> <span className="text-xs font-bold uppercase">Desc. (S/)</span></div>
+                        {/* AQUÍ EL INPUT CORREGIDO DEL DESCUENTO */}
                         <input type="number" min="0" step="0.50" value={descuentoManual === 0 ? "" : descuentoManual} onChange={(e) => setDescuentoManual(Number(e.target.value))} className="w-24 p-2 bg-gray-700 border border-gray-600 rounded-lg text-right text-sm font-bold text-white focus:outline-none" />
                     </div>
                     <div className="space-y-1 text-sm border-t border-gray-700 pt-4">

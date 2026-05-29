@@ -1,3 +1,4 @@
+//app/api/estudiantes/ultimo-dni-sin-dni/route.ts
 import prisma from "@/lib/prisma"
 import { NextResponse } from "next/server"
 

@@ -1,3 +1,5 @@
+//app/(dashboard)/admin/notas/page.tsx
+//app/(dashboard)/admin/notas/page.tsx
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
@@ -25,7 +27,7 @@ export default async function NotasPage() {
     const configuraciones = await prisma.configuracionConcurso.findMany()
 
     return (
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-7xl mx-auto space-y-6 pb-12">
             <div>
                 <h1 className="text-2xl font-bold text-gray-900">Subida de Notas y Resultados</h1>
                 <p className="text-gray-600">Busca al alumno, digita las correctas e incorrectas, y usa la tecla TAB para navegar rápido.</p>

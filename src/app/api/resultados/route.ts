@@ -1,3 +1,4 @@
+//src/app/api/resultados/route.ts
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth/next"
 // Ajusta esta ruta si tu authOptions está en otro lado
