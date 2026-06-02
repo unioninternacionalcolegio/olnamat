@@ -161,12 +161,13 @@ model ResultadoExamen {
   puntajeTotal     Float      @default(0)
   horaSalida       DateTime?
 
+  respuestasDetalle Json?
+
   revisadorId      String?
   
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 }
-
 model ConfiguracionConcurso {
   id                 String   @id @default(cuid())
   nivel              String
@@ -238,6 +239,14 @@ model Cupon {
   // Relación inversa con Pago (1 a 1)
   pago        Pago?    // Se vincula automáticamente cuando un delegado lo canjea
 
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+model DescuentoColegio {
+  id          String   @id @default(cuid())
+  institucion String   @unique
+  descuento   Float    // Ej: 2 (S/ 2.00 por inscrito)
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

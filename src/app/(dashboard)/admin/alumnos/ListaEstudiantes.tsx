@@ -1,13 +1,13 @@
-//app\(dashboard)\admin\alumnos\ListaEstudiantes.tsx
 // app/(dashboard)/admin/alumnos/ListaEstudiantes.tsx
 "use client"
 
 import { useState, useMemo } from "react"
 import {
     Edit2, Trash2, AlertCircle, CheckCircle, Search,
-    UserCheck, Printer, Users, Building2, UserCircle, FileDown
+    UserCheck, Printer, Users, Building2, UserCircle, FileDown, Calendar
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { format } from "date-fns" // Ya lo tienes en tu package.json
 
 export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales: any[], rolUsuario?: string }) {
     const router = useRouter()
@@ -16,9 +16,12 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
     const [filtroTipo, setFiltroTipo] = useState("TODOS") // TODOS, LIBRE, DELEGADO, COLEGIO
     const [editando, setEditando] = useState<any>(null)
     const [loading, setLoading] = useState(false)
-    const [seleccionados, setSeleccionados] = useState<string[]>([])
 
-    // 1. Ordenamiento Inteligente
+    // Estados para la selección
+    const [seleccionados, setSeleccionados] = useState<string[]>([])
+    const [ultimoIndiceSeleccionado, setUltimoIndiceSeleccionado] = useState<number | null>(null)
+
+    // 1. Ordenamiento Inteligente (Pendientes primero, luego los más recientes)
     const estudiantesOrdenados = useMemo(() => {
         return [...estudiantes].sort((a, b) => {
             const aPendiente = a.estadoRegistro !== 'COMPLETO' || a.pago?.estado !== 'APROBADO'
@@ -29,6 +32,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
 
             const dateA = new Date(a.createdAt || 0).getTime()
             const dateB = new Date(b.createdAt || 0).getTime()
+            // dateB - dateA garantiza que los últimos inscritos salgan primero
             return dateB - dateA
         })
     }, [estudiantes])
@@ -37,11 +41,14 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
     const filtrados = useMemo(() => {
         return estudiantesOrdenados.filter(e => {
             const terminoBusqueda = busqueda.toLowerCase()
+            const nombreDelegado = e.creador?.role === 'DELEGADO' ? (e.creador?.name || "delegado") : "libre"
+
             const matchSearch =
                 e.nombres?.toLowerCase().includes(terminoBusqueda) ||
                 e.apellidos?.toLowerCase().includes(terminoBusqueda) ||
                 e.dni?.includes(busqueda) ||
                 e.institucion?.toLowerCase().includes(terminoBusqueda) ||
+                nombreDelegado.toLowerCase().includes(terminoBusqueda) || // Búsqueda por delegado
                 e.id.includes(busqueda)
 
             let matchFiltro = true
@@ -109,7 +116,6 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
         }
     }
 
-    // REGISTRAR IMPRESIÓN EN BD
     const registrarImpresionBD = async (ids: string[]) => {
         try {
             await fetch('/api/estudiantes/impresiones', {
@@ -117,22 +123,17 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ids })
             })
-            // Actualizar estado local para reflejar que ya se imprimió
             setEstudiantes(prev => prev.map(e => ids.includes(e.id) ? { ...e, impresiones: (e.impresiones || 0) + 1 } : e))
         } catch (error) {
             console.error("No se pudo registrar la impresión en BD")
         }
     }
 
-    // Lógica de Impresión / PDF
     const handleAccionImpresion = async (tipo: 'IMPRIMIR' | 'PDF', idsArray?: string[]) => {
         const idsAProcesar = idsArray || seleccionados
         if (idsAProcesar.length === 0) return alert("Selecciona al menos un alumno aprobado.")
 
-        // 1. Sumar en Base de Datos
         await registrarImpresionBD(idsAProcesar)
-
-        // 2. Redirigir enviando los IDs. Si es PDF, le mandamos el parámetro extra "action=pdf"
         const idsStr = idsAProcesar.join(',')
         const url = `/admin/imprimir?ids=${idsStr}${tipo === 'PDF' ? '&action=pdf' : ''}`
         router.push(url)
@@ -145,11 +146,43 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
         handleAccionImpresion('IMPRIMIR', ids)
     }
 
-    // Lógica de Checkboxes
-    const toggleSeleccion = (id: string) => {
-        setSeleccionados(prev =>
-            prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-        )
+    // 5. Lógica de Selección Avanzada (Shift + Click)
+    const handleSeleccionMultiple = (e: React.MouseEvent<HTMLInputElement>, id: string, index: number, listo: boolean) => {
+        // Detener la propagación para que no interfiera el onChange nativo
+        e.stopPropagation()
+        if (!listo) return
+
+        const checked = (e.target as HTMLInputElement).checked
+        let nuevosSeleccionados = [...seleccionados]
+
+        if (e.shiftKey && ultimoIndiceSeleccionado !== null) {
+            // Seleccionar un rango al estilo Windows
+            const inicio = Math.min(ultimoIndiceSeleccionado, index)
+            const fin = Math.max(ultimoIndiceSeleccionado, index)
+
+            for (let i = inicio; i <= fin; i++) {
+                const est = filtrados[i]
+                const estListo = est.estadoRegistro === 'COMPLETO' && est.pago?.estado === 'APROBADO'
+
+                if (estListo) {
+                    if (checked && !nuevosSeleccionados.includes(est.id)) {
+                        nuevosSeleccionados.push(est.id)
+                    } else if (!checked && nuevosSeleccionados.includes(est.id)) {
+                        nuevosSeleccionados = nuevosSeleccionados.filter(selId => selId !== est.id)
+                    }
+                }
+            }
+        } else {
+            // Selección normal
+            if (checked) {
+                nuevosSeleccionados.push(id)
+            } else {
+                nuevosSeleccionados = nuevosSeleccionados.filter(selId => selId !== id)
+            }
+        }
+
+        setSeleccionados(nuevosSeleccionados)
+        setUltimoIndiceSeleccionado(index)
     }
 
     const toggleSeleccionarTodos = () => {
@@ -208,7 +241,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <input
                             type="text"
-                            placeholder="Buscar DNI, Nombre o Colegio..."
+                            placeholder="Buscar DNI, Nombre, Colegio o Delegado..."
                             className="w-full pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
                             value={busqueda}
                             onChange={(e) => setBusqueda(e.target.value)}
@@ -227,8 +260,6 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                 </div>
 
                 <div className="flex w-full xl:w-auto gap-2 flex-wrap xl:flex-nowrap">
-
-                    {/* BOTON PDF (SOLO ADMIN) */}
                     {rolUsuario === 'ADMINISTRADOR' && (
                         <button
                             onClick={() => handleAccionImpresion('PDF')}
@@ -278,13 +309,16 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                     onChange={toggleSeleccionarTodos}
                                     checked={
                                         filtrados.length > 0 &&
+                                        filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO').length > 0 &&
                                         filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO').every(e => seleccionados.includes(e.id))
                                     }
                                 />
                             </th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Estado / Impresión</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Fecha Inscripción</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">DNI / Código</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Alumno</th>
+                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Delegado</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Grado / Nivel</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Acciones</th>
                         </tr>
@@ -292,14 +326,16 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                     <tbody className="divide-y">
                         {filtrados.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="p-8 text-center text-gray-500">
+                                <td colSpan={8} className="p-8 text-center text-gray-500">
                                     No se encontraron alumnos.
                                 </td>
                             </tr>
                         ) : (
-                            filtrados.map((est) => {
+                            filtrados.map((est, index) => {
                                 const listo = est.estadoRegistro === 'COMPLETO' && est.pago?.estado === 'APROBADO';
                                 const yaImpreso = (est.impresiones || 0) > 0;
+                                const esDelegado = est.creador?.role === 'DELEGADO';
+                                const nombreDelegado = esDelegado && est.creador?.name ? est.creador.name : 'LIBRE';
 
                                 return (
                                     <tr key={est.id} className={`hover:bg-gray-50 transition-colors ${!listo ? 'bg-orange-50/30' : ''}`}>
@@ -308,9 +344,11 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                                 type="checkbox"
                                                 className="w-4 h-4 rounded text-blue-600 cursor-pointer disabled:opacity-50"
                                                 checked={seleccionados.includes(est.id)}
-                                                onChange={() => toggleSeleccion(est.id)}
+                                                // Usamos onClick en lugar de onChange para capturar el evento ShiftKey
+                                                onClick={(e) => handleSeleccionMultiple(e, est.id, index, listo)}
+                                                onChange={() => { }} // React se queja si no hay onChange cuando usas checked
                                                 disabled={!listo}
-                                                title={!listo ? "Faltan datos o pago pendiente" : "Seleccionar"}
+                                                title={!listo ? "Faltan datos o pago pendiente" : "Seleccionar (Usa Shift para varios)"}
                                             />
                                         </td>
                                         <td className="p-4">
@@ -324,7 +362,6 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                                         <AlertCircle className="w-3 h-3 mr-1" /> Pendiente
                                                     </span>
                                                 )}
-                                                {/* BADGE DE IMPRESIÓN */}
                                                 {yaImpreso && (
                                                     <span className="inline-flex items-center bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider">
                                                         <Printer className="w-3 h-3 mr-1" /> Impreso ({est.impresiones})
@@ -332,7 +369,16 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                                 )}
                                             </div>
                                         </td>
+
+                                        <td className="p-4">
+                                            <div className="flex items-center text-sm text-gray-600">
+                                                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                                                <span>{est.createdAt ? format(new Date(est.createdAt), "dd/MM/yyyy HH:mm") : "Sin fecha"}</span>
+                                            </div>
+                                        </td>
+
                                         <td className="p-4 font-mono text-sm text-gray-600">{est.dni || est.id.substring(0, 8)}</td>
+
                                         <td className="p-4">
                                             <p className="font-bold text-gray-800">{est.nombres || "SIN NOMBRE"} {est.apellidos}</p>
                                             <p className="text-xs text-gray-500 flex items-center mt-1">
@@ -343,6 +389,20 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                                 </span>
                                             </p>
                                         </td>
+
+                                        <td className="p-4">
+                                            {esDelegado ? (
+                                                <span className="inline-flex items-center bg-purple-50 text-purple-700 px-2 py-1.5 rounded-md text-xs font-bold shadow-sm border border-purple-100">
+                                                    <Users className="w-3 h-3 mr-1.5" />
+                                                    <span className="max-w-[120px] truncate" title={nombreDelegado}>{nombreDelegado}</span>
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center bg-gray-100 text-gray-600 px-2 py-1.5 rounded-md text-xs font-bold">
+                                                    <UserCircle className="w-3 h-3 mr-1.5" /> LIBRE
+                                                </span>
+                                            )}
+                                        </td>
+
                                         <td className="p-4">
                                             <p className="text-sm font-medium text-gray-700">{est.gradoOEdad}</p>
                                             <p className="text-[10px] uppercase font-bold text-blue-500">{est.nivel}</p>
@@ -381,7 +441,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                 </table>
             </div>
 
-            {/* MODAL DE EDICIÓN */}
+            {/* MODAL DE EDICIÓN (Mantenido exactamente igual) */}
             {editando && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-in zoom-in duration-200">

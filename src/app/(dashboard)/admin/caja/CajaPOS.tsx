@@ -15,6 +15,13 @@ type Cliente = {
     celular?: string | null
 }
 
+// NUEVO TIPO PARA LOS DESCUENTOS
+type DescuentoColegio = {
+    id: string,
+    institucion: string,
+    descuento: number
+}
+
 type EstudianteEnCarrito = {
     dni: string,
     nombres: string,
@@ -51,24 +58,38 @@ type FormularioEstudiante = {
     gradoOEdad: string;
     errorDni?: boolean;
     tipoErrorDni?: "REGISTRADO" | "DUPLICADO";
+    errorGrado?: boolean; // NUEVO: Para marcar errores del Excel
 }
+
+// NUEVO: Diccionario estricto para validar Excel
+const GRADOS_VALIDOS: Record<string, string[]> = {
+    "INICIAL": ["3 años", "4 años", "5 años"],
+    "PRIMARIA": ["1er Grado", "2do Grado", "3er Grado", "4to Grado", "5to Grado", "6to Grado"],
+    "SECUNDARIA": ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
+};
 
 export default function CajaPOS({
     clientes = [],
     configuraciones = [],
-    cajeroId = ""
+    cajeroId = "",
+    descuentosColegios = [] // NUEVO PROP
 }: {
     clientes?: Cliente[],
     configuraciones?: any[],
-    cajeroId?: string
+    cajeroId?: string,
+    descuentosColegios?: DescuentoColegio[]
 }) {
     const router = useRouter()
 
     const safeConfiguraciones = Array.isArray(configuraciones) ? configuraciones : []
     const safeClientes = Array.isArray(clientes) ? clientes : []
+    const safeDescuentos = Array.isArray(descuentosColegios) ? descuentosColegios : []
 
     const [clientesList, setClientesList] = useState<Cliente[]>(safeClientes)
     const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState("")
+
+    // NUEVO: Guardará el descuento por alumno si el colegio coincide
+    const [descuentoActivoColegio, setDescuentoActivoColegio] = useState<number>(0)
 
     const [pagosParciales, setPagosParciales] = useState<PagoParcial[]>([{
         metodo: "EFECTIVO",
@@ -120,6 +141,23 @@ export default function CajaPOS({
 
     const clienteActual = useMemo(() => clientesList.find(c => c.id === clienteSeleccionadoId), [clienteSeleccionadoId, clientesList])
 
+    // NUEVA FUNCIÓN: Verifica si la institución tiene descuento
+    const verificarDescuentoColegio = (institucion: string | null) => {
+        if (!institucion) {
+            setDescuentoActivoColegio(0);
+            return;
+        }
+        let instLimpia = institucion.toUpperCase().replace("LIBRE-", "").trim();
+        const descuentoEncontrado = safeDescuentos.find(d => d.institucion.toUpperCase() === instLimpia);
+
+        if (descuentoEncontrado) {
+            setDescuentoActivoColegio(descuentoEncontrado.descuento);
+            alert(`¡ATENCIÓN!\nESTE COLEGIO (${instLimpia}) TIENE S/ ${descuentoEncontrado.descuento.toFixed(2)} DE DESCUENTO EN CADA INSCRITO.`);
+        } else {
+            setDescuentoActivoColegio(0);
+        }
+    }
+
     useEffect(() => {
         if ((mostrarRegistroRapido || modoInscripcion === "LIBRE") && formularios.length === 0) {
             agregarFilaVacia()
@@ -150,7 +188,6 @@ export default function CajaPOS({
             const data = await res.json()
 
             const dbNextNum = data.nextNum || 1;
-
             const finalStartNum = Math.max(dbNextNum, maxCartNum + 1);
 
             setUltimoDniGenerado(finalStartNum)
@@ -176,7 +213,8 @@ export default function CajaPOS({
             nombres: "",
             apellidos: "",
             nivel: "PRIMARIA",
-            gradoOEdad: "1er Grado"
+            gradoOEdad: "1er Grado",
+            errorGrado: false
         }
 
         if (tipoRegistro === "SIN_DNI") {
@@ -194,6 +232,10 @@ export default function CajaPOS({
                 if (campo === 'nivel') {
                     const configPorNivel = safeConfiguraciones.filter(c => c.nivel === valor)
                     if (configPorNivel.length > 0) updated.gradoOEdad = configPorNivel[0].gradoOEdad
+                    updated.errorGrado = false // Limpia error manual
+                }
+                if (campo === 'gradoOEdad') {
+                    updated.errorGrado = false // Limpia error manual
                 }
                 if (campo === 'dni') {
                     updated.errorDni = false
@@ -278,6 +320,7 @@ export default function CajaPOS({
             const data = XLSX.utils.sheet_to_json(ws)
 
             let runningNum = ultimoDniGenerado + formularios.filter(f => !f.dni.trim() || f.dni.startsWith('0000')).length
+            let contadorErroresGrado = 0;
 
             const nuevosFormularios: FormularioEstudiante[] = data.map((row: any) => {
                 let dni = row.DNI ? row.DNI.toString().trim() : ""
@@ -289,13 +332,35 @@ export default function CajaPOS({
                     dni = dni.padStart(8, '0')
                 }
 
+                // VALIDACIÓN ESTRICTA DE NIVEL Y GRADO/EDAD
+                const nivelTrim = row.NIVEL ? row.NIVEL.toString().toUpperCase().trim() : "PRIMARIA"
+                const gradoTrim = row.GRADO ? row.GRADO.toString().trim() : "1er Grado"
+
+                let errorGrado = false;
+                let gradoFinal = gradoTrim;
+
+                const gradosPermitidos = GRADOS_VALIDOS[nivelTrim];
+                if (!gradosPermitidos) {
+                    errorGrado = true; // El Nivel no existe
+                } else {
+                    const gradoEncontrado = gradosPermitidos.find(g => g.toLowerCase() === gradoTrim.toLowerCase());
+                    if (!gradoEncontrado) {
+                        errorGrado = true; // El Grado no coincide con el Nivel
+                    } else {
+                        gradoFinal = gradoEncontrado; // Lo normalizamos exacto a la DB
+                    }
+                }
+
+                if (errorGrado) contadorErroresGrado++;
+
                 return {
                     idLocal: Date.now().toString() + Math.random().toString(),
                     dni: dni,
                     nombres: (row.NOMBRES || "").toUpperCase().trim(),
                     apellidos: (row.APELLIDOS || "").toUpperCase().trim(),
-                    nivel: row.NIVEL ? row.NIVEL.toString().toUpperCase().trim() : "PRIMARIA",
-                    gradoOEdad: row.GRADO ? row.GRADO.toString().trim() : "1er Grado"
+                    nivel: nivelTrim,
+                    gradoOEdad: gradoFinal,
+                    errorGrado: errorGrado
                 }
             })
 
@@ -323,6 +388,10 @@ export default function CajaPOS({
             })
 
             setFormularios(listaConErroresLocales)
+
+            if (contadorErroresGrado > 0) {
+                alert(`¡Alerta! Tienes mal digitados (${contadorErroresGrado}) alumnos en Grados/Edad (marcados en rojo). Por favor corrige sus niveles o grados para continuar.`);
+            }
 
             if (duplicadosLocales.size > 0) {
                 alert(`¡Alerta de Excel! Se detectaron ${duplicadosLocales.size} DNIs repetidos dentro del mismo archivo/formulario (marcados en naranja).`)
@@ -352,9 +421,10 @@ export default function CajaPOS({
             }
         }
         reader.readAsBinaryString(file)
+        e.target.value = ''; // Resetea el input para poder subir el mismo archivo si se corrige
     }
 
-    // ==== FUNCIÓN RESTAURADA ====
+    // ==== LÓGICA DE PRECIOS ACTUALIZADA CON DESCUENTOS ====
     const calcularPrecio = (nivel: string, grado: string, tipoCol: string) => {
         const config = safeConfiguraciones.find(c => c.nivel === nivel && c.gradoOEdad === grado)
         if (!config) return { monto: 0, fase: faseVentaActiva }
@@ -369,6 +439,10 @@ export default function CajaPOS({
             else if (tipoCol === 'PARTICULAR') monto = config.costoParticularReg
             else monto = config.costoLibreReg
         }
+
+        // APLICAR DESCUENTO POR COLEGIO (Asegurando que no baje de 0)
+        monto = Math.max(0, monto - descuentoActivoColegio);
+
         return { monto, fase: faseVentaActiva }
     }
     // ============================
@@ -382,6 +456,12 @@ export default function CajaPOS({
         const tieneErroresDni = formularios.some(f => f.errorDni)
         if (tieneErroresDni) {
             return alert("¡No puedes continuar! Hay DNIs duplicados o ya registrados en la lista (revisa los campos naranjas y rojos).")
+        }
+
+        // NUEVA VALIDACIÓN: Bloqueo si hay errores de grado/nivel
+        const tieneErroresGrado = formularios.some(f => f.errorGrado)
+        if (tieneErroresGrado) {
+            return alert("¡No puedes continuar! Tienes alumnos con Nivel o Grado incorrectos (marcados en rojo).")
         }
 
         if (modoInscripcion === "LIBRE" && !datosGeneralesLibre.institucion) {
@@ -444,7 +524,8 @@ export default function CajaPOS({
 
             formularios.forEach(form => {
                 const { monto, fase } = calcularPrecio(form.nivel, form.gradoOEdad, tipoColegioActivo)
-                const idItem = `${form.nivel}-${form.gradoOEdad}-${tipoColegioActivo}-${fase}`
+                // Separamos en el ID si tiene descuento o no para no agruparlos mal si cambian los precios
+                const idItem = `${form.nivel}-${form.gradoOEdad}-${tipoColegioActivo}-${fase}-${monto}`
 
                 const indexExiste = carritoTemp.findIndex(item => item.id === idItem)
 
@@ -488,7 +569,7 @@ export default function CajaPOS({
         if (!clienteActual && !clienteSeleccionadoId) return alert("Selecciona un cliente/delegado primero.")
 
         const { monto, fase } = calcularPrecio(nivel, grado, tipoColegioActivo)
-        const idItem = `${nivel}-${grado}-${tipoColegioActivo}-${fase}`
+        const idItem = `${nivel}-${grado}-${tipoColegioActivo}-${fase}-${monto}`
         const existe = carrito.find(item => item.id === idItem)
 
         if (existe) {
@@ -574,6 +655,7 @@ export default function CajaPOS({
             setTicketVendido(data.ticket)
             setCarrito([])
             setDescuentoManual(0)
+            setDescuentoActivoColegio(0)
             setDatosGeneralesLibre({ celular: "", institucion: "" })
             setPagosParciales([{
                 metodo: "EFECTIVO", monto: 0, numeroOperacion: "",
@@ -641,8 +723,8 @@ export default function CajaPOS({
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-6">
 
                     <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200">
-                        <button onClick={() => { setModoInscripcion("DELEGADO"); setClienteSeleccionadoId(""); setMostrarRegistroRapido(false); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${modoInscripcion === "DELEGADO" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}>MODO DELEGADO</button>
-                        <button onClick={() => { setModoInscripcion("LIBRE"); setClienteSeleccionadoId(""); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${modoInscripcion === "LIBRE" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500"}`}> <UserCircle2 className="w-5 h-5" /> INDEPENDIENTE (LIBRE)</button>
+                        <button onClick={() => { setModoInscripcion("DELEGADO"); setClienteSeleccionadoId(""); setMostrarRegistroRapido(false); setDescuentoActivoColegio(0); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${modoInscripcion === "DELEGADO" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}>MODO DELEGADO</button>
+                        <button onClick={() => { setModoInscripcion("LIBRE"); setClienteSeleccionadoId(""); setDescuentoActivoColegio(0); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${modoInscripcion === "LIBRE" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500"}`}> <UserCircle2 className="w-5 h-5" /> INDEPENDIENTE (LIBRE)</button>
                     </div>
 
                     {modoInscripcion === "DELEGADO" && (
@@ -651,7 +733,7 @@ export default function CajaPOS({
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                                 <input type="text" placeholder="Escribe nombre o DNI..." className="w-full p-4 pl-12 border-2 border-gray-100 rounded-2xl font-bold bg-gray-50 focus:border-blue-500 focus:outline-none" value={busquedaDelegado}
-                                    onChange={e => { setBusquedaDelegado(e.target.value); setMostrarOpcionesDelegado(true); if (e.target.value === "") setClienteSeleccionadoId(""); }}
+                                    onChange={e => { setBusquedaDelegado(e.target.value); setMostrarOpcionesDelegado(true); if (e.target.value === "") { setClienteSeleccionadoId(""); setDescuentoActivoColegio(0); } }}
                                     onFocus={() => setMostrarOpcionesDelegado(true)} onBlur={() => setTimeout(() => setMostrarOpcionesDelegado(false), 200)}
                                 />
                             </div>
@@ -659,7 +741,13 @@ export default function CajaPOS({
                                 <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-2xl max-h-60 overflow-auto">
                                     {delegadosFiltrados.map(d => (
                                         <div key={d.id} className="p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
-                                            onClick={() => { setClienteSeleccionadoId(d.id); setBusquedaDelegado(`${d.name} (${d.dni})`); setMostrarOpcionesDelegado(false); setMostrarRegistroRapido(true); }}>
+                                            onClick={() => {
+                                                setClienteSeleccionadoId(d.id);
+                                                setBusquedaDelegado(`${d.name} (${d.dni})`);
+                                                setMostrarOpcionesDelegado(false);
+                                                setMostrarRegistroRapido(true);
+                                                verificarDescuentoColegio(d.institucion); // NUEVO: Dispara validación de colegio
+                                            }}>
                                             <p className="font-bold text-sm text-gray-800">{d.name}</p>
                                             <p className="text-[10px] font-bold text-gray-500 flex items-center mt-1">
                                                 <span className="text-blue-500 mr-2">{d.dni}</span>
@@ -680,7 +768,14 @@ export default function CajaPOS({
                                 <input placeholder="CELULAR (Opcional)" value={datosGeneralesLibre.celular} onChange={e => setDatosGeneralesLibre({ ...datosGeneralesLibre, celular: e.target.value })} maxLength={9} type="tel" className="p-3 text-sm font-bold border rounded-xl bg-white" />
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-purple-600 bg-purple-100 px-2 py-1 rounded">COLEGIO</span>
-                                    <input placeholder="Escribe el colegio de procedencia..." value={datosGeneralesLibre.institucion} onChange={e => setDatosGeneralesLibre({ ...datosGeneralesLibre, institucion: e.target.value })} list="colegios-list" className="w-full p-3 pl-24 text-sm font-bold border rounded-xl bg-white uppercase" />
+                                    <input
+                                        placeholder="Escribe el colegio de procedencia..."
+                                        value={datosGeneralesLibre.institucion}
+                                        onChange={e => setDatosGeneralesLibre({ ...datosGeneralesLibre, institucion: e.target.value })}
+                                        onBlur={() => verificarDescuentoColegio(datosGeneralesLibre.institucion)} // NUEVO: Check al salir del campo
+                                        list="colegios-list"
+                                        className="w-full p-3 pl-24 text-sm font-bold border rounded-xl bg-white uppercase"
+                                    />
                                     <datalist id="colegios-list">
                                         {colegiosUnicos.map(col => <option key={col} value={col} />)}
                                     </datalist>
@@ -714,8 +809,11 @@ export default function CajaPOS({
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                                 {formularios.map((form) => {
                                     const configPorNivel = safeConfiguraciones.filter(c => c.nivel === form.nivel)
+                                    // Determinar si hay opciones disponibles para el select de grado
+                                    const opcionesValidas = configPorNivel.length > 0 ? configPorNivel.map(c => c.gradoOEdad) : GRADOS_VALIDOS[form.nivel] || []
+
                                     return (
-                                        <div key={form.idLocal} className="grid grid-cols-1 md:grid-cols-12 gap-2 bg-white p-3 rounded-xl border shadow-sm items-center relative">
+                                        <div key={form.idLocal} className={`grid grid-cols-1 md:grid-cols-12 gap-2 p-3 rounded-xl border shadow-sm items-center relative ${form.errorGrado ? 'bg-red-50 border-red-300' : 'bg-white'}`}>
                                             <div className="md:col-span-2">
                                                 <input
                                                     placeholder="DNI"
@@ -744,17 +842,29 @@ export default function CajaPOS({
                                             <div className="md:col-span-3">
                                                 <input placeholder="APELLIDOS" value={form.apellidos} onChange={e => actualizarFila(form.idLocal, 'apellidos', e.target.value)} className="w-full p-2 text-xs font-bold border rounded-lg bg-gray-50 uppercase" />
                                             </div>
-                                            <div className="md:col-span-2">
-                                                <select value={form.nivel} onChange={e => actualizarFila(form.idLocal, 'nivel', e.target.value)} className="w-full p-2 text-[10px] font-bold border rounded-lg bg-white uppercase">
+                                            <div className="md:col-span-2 relative">
+                                                <select value={form.nivel} onChange={e => actualizarFila(form.idLocal, 'nivel', e.target.value)} className={`w-full p-2 text-[10px] font-bold border rounded-lg uppercase ${form.errorGrado ? 'bg-red-100 text-red-700 border-red-400' : 'bg-white'}`}>
                                                     <option value="INICIAL">INICIAL</option>
                                                     <option value="PRIMARIA">PRIMARIA</option>
                                                     <option value="SECUNDARIA">SECUNDARIA</option>
                                                 </select>
                                             </div>
-                                            <div className="md:col-span-1">
-                                                <select value={form.gradoOEdad} onChange={e => actualizarFila(form.idLocal, 'gradoOEdad', e.target.value)} className="w-full p-2 text-[10px] font-bold border rounded-lg bg-white">
-                                                    {configPorNivel.map(c => <option key={c.gradoOEdad} value={c.gradoOEdad}>{c.gradoOEdad}</option>)}
-                                                </select>
+                                            <div className="md:col-span-1 relative">
+                                                {form.errorGrado ? (
+                                                    <input
+                                                        value={form.gradoOEdad}
+                                                        onChange={e => actualizarFila(form.idLocal, 'gradoOEdad', e.target.value)}
+                                                        className="w-full p-2 text-[10px] font-bold border rounded-lg bg-red-100 text-red-700 border-red-400"
+                                                        title="Escribe un grado válido o corrige el nivel"
+                                                    />
+                                                ) : (
+                                                    <select value={form.gradoOEdad} onChange={e => actualizarFila(form.idLocal, 'gradoOEdad', e.target.value)} className="w-full p-2 text-[10px] font-bold border rounded-lg bg-white">
+                                                        {opcionesValidas.map((g: string) => <option key={g} value={g}>{g}</option>)}
+                                                    </select>
+                                                )}
+                                                {form.errorGrado && (
+                                                    <p className="text-[9px] font-black text-red-600 mt-0.5 absolute -bottom-3 w-32 left-0 z-10 bg-white px-1 shadow-sm rounded">Inválido</p>
+                                                )}
                                             </div>
                                             <div className="md:col-span-1 flex justify-center">
                                                 <button onClick={() => eliminarFila(form.idLocal)} className="text-red-400 hover:text-red-600 p-2"><Trash2 className="w-4 h-4" /></button>
@@ -804,6 +914,12 @@ export default function CajaPOS({
                     {clienteSeleccionadoId && <span className="text-[10px] bg-gray-600 px-2 py-1 rounded">Asignado</span>}
                 </div>
 
+                {descuentoActivoColegio > 0 && (
+                    <div className="bg-green-100 p-2 text-center text-xs font-black text-green-700 animate-pulse uppercase border-b border-green-200">
+                        ✨ Descuento especial de S/{descuentoActivoColegio.toFixed(2)} por inscrito aplicado ✨
+                    </div>
+                )}
+
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {carrito.map(item => (
                         <div key={item.id} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-2xl border border-gray-100">
@@ -829,7 +945,7 @@ export default function CajaPOS({
                                 </div>
                             </div>
                             <div className="flex justify-between items-center mt-1 border-t border-gray-200 pt-2">
-                                <span className="text-[10px] font-bold text-gray-400">P. Unit:</span>
+                                <span className="text-[10px] font-bold text-gray-400">P. Unit (Inc. desc):</span>
                                 <input type="number" step="0.50" value={item.precio} onChange={(e) => actualizarPrecio(item.id, Number(e.target.value))} className="w-16 p-1 text-xs font-bold border rounded bg-white text-right" />
                             </div>
                         </div>
@@ -877,13 +993,12 @@ export default function CajaPOS({
                     </div>
 
                     <div className="flex justify-between items-center bg-gray-900 p-3 rounded-xl border border-gray-700">
-                        <div className="flex items-center text-gray-400"><Tag className="w-4 h-4 mr-2" /> <span className="text-xs font-bold uppercase">Desc. (S/)</span></div>
-                        {/* AQUÍ EL INPUT CORREGIDO DEL DESCUENTO */}
+                        <div className="flex items-center text-gray-400"><Tag className="w-4 h-4 mr-2" /> <span className="text-xs font-bold uppercase">Desc. Extra (S/)</span></div>
                         <input type="number" min="0" step="0.50" value={descuentoManual === 0 ? "" : descuentoManual} onChange={(e) => setDescuentoManual(Number(e.target.value))} className="w-24 p-2 bg-gray-700 border border-gray-600 rounded-lg text-right text-sm font-bold text-white focus:outline-none" />
                     </div>
                     <div className="space-y-1 text-sm border-t border-gray-700 pt-4">
                         <div className="flex justify-between text-gray-400"><span>Subtotal</span><span>S/ {subtotal.toFixed(2)}</span></div>
-                        {descuentoManual > 0 && <div className="flex justify-between text-green-400"><span>Descuento</span><span>- S/ {descuentoManual.toFixed(2)}</span></div>}
+                        {descuentoManual > 0 && <div className="flex justify-between text-green-400"><span>Descuento Extra</span><span>- S/ {descuentoManual.toFixed(2)}</span></div>}
                         <div className="flex justify-between items-center pt-2">
                             <span className="font-black text-sm uppercase">Total</span>
                             <span className="font-black text-2xl text-blue-400">S/ {total.toFixed(2)}</span>

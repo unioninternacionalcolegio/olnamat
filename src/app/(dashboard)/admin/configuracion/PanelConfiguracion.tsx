@@ -1,16 +1,20 @@
-//app/(dashboard)/admin/configuracion/PanelConfiguracion.tsx
+// app/(dashboard)/admin/configuracion/PanelConfiguracion.tsx
 "use client"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Save, Edit2, Trash2, Settings, Clock, Building2, Ticket, PlusCircle } from "lucide-react"
+import { Save, Edit2, Trash2, Settings, Clock, Building2, Ticket, PlusCircle, Landmark } from "lucide-react"
 
 export default function PanelConfiguracion({
     dataInicial,
-    cuponesIniciales = []
+    cuponesIniciales = [],
+    descuentosIniciales = [],
+    colegiosSugeridos = []
 }: {
     dataInicial: any[],
-    cuponesIniciales?: any[]
+    cuponesIniciales?: any[],
+    descuentosIniciales?: any[],
+    colegiosSugeridos?: string[]
 }) {
     const router = useRouter()
 
@@ -154,10 +158,59 @@ export default function PanelConfiguracion({
         }
     }
 
+    // ================= ESTADOS: DESCUENTOS POR COLEGIO =================
+    const [descuentos, setDescuentos] = useState(descuentosIniciales)
+    const [loadingDescuento, setLoadingDescuento] = useState(false)
+    const [formDescuento, setFormDescuento] = useState({ id: "", institucion: "", descuento: 2 })
+
+    const editarDescuento = (desc: any) => {
+        setFormDescuento({ id: desc.id, institucion: desc.institucion, descuento: desc.descuento })
+    }
+
+    const guardarDescuento = async (e: React.FormEvent) => {
+        e.preventDefault()
+        setLoadingDescuento(true)
+        try {
+            const res = await fetch("/api/descuentos-colegio", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(formDescuento)
+            })
+            const data = await res.json()
+            if (!res.ok) throw new Error(data.error || "Error al guardar el descuento")
+
+            alert("Descuento guardado correctamente")
+            setFormDescuento({ id: "", institucion: "", descuento: 2 })
+            router.refresh()
+
+            const existe = descuentos.find((d: any) => d.id === data.descuento.id)
+            if (existe) {
+                setDescuentos(descuentos.map((d: any) => d.id === data.descuento.id ? data.descuento : d))
+            } else {
+                setDescuentos([data.descuento, ...descuentos])
+            }
+        } catch (error: any) {
+            alert(error.message)
+        } finally {
+            setLoadingDescuento(false)
+        }
+    }
+
+    const eliminarDescuento = async (id: string) => {
+        if (!confirm("¿Seguro que deseas eliminar el descuento de este colegio?")) return
+        try {
+            const res = await fetch(`/api/descuentos-colegio/${id}`, { method: 'DELETE' })
+            if (!res.ok) throw new Error("Error al eliminar")
+            setDescuentos(descuentos.filter((d: any) => d.id !== id))
+        } catch (error: any) {
+            alert(error.message)
+        }
+    }
+
     return (
         <div className="space-y-12">
 
-            {/* SECCIÓN 1: CONFIGURACIÓN DE GRADOS (Tu código original) */}
+            {/* SECCIÓN 1: CONFIGURACIÓN DE GRADOS (Original intacta) */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-1">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 sticky top-6">
@@ -167,7 +220,6 @@ export default function PanelConfiguracion({
                         </h2>
 
                         <form onSubmit={guardarConfiguracion} className="space-y-5">
-                            {/* ... (Todo tu formulario de configuración se mantiene igual) ... */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2 md:col-span-1">
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nivel</label>
@@ -323,7 +375,7 @@ export default function PanelConfiguracion({
 
             <hr className="border-gray-200" />
 
-            {/* SECCIÓN 2: GESTIÓN DE CUPONES DE DESCUENTO */}
+            {/* SECCIÓN 2: GESTIÓN DE CUPONES DE DESCUENTO (Original intacta) */}
             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div className="xl:col-span-1">
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 sticky top-6">
@@ -421,6 +473,115 @@ export default function PanelConfiguracion({
                                                     >
                                                         <Trash2 className="w-4 h-4 mx-auto" />
                                                     </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <hr className="border-gray-200" />
+
+            {/* 💉 NUEVO: SECCIÓN 3: DESCUENTOS POR COLEGIO */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 pb-12">
+                <div className="xl:col-span-1">
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 sticky top-6">
+                        <h2 className="text-lg font-bold flex items-center mb-6 text-gray-800">
+                            <Landmark className="w-5 h-5 mr-2 text-purple-600" />
+                            {formDescuento.id ? "Editar Descuento" : "Descuento por Colegio"}
+                        </h2>
+
+                        <form onSubmit={guardarDescuento} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Institución (Colegio)</label>
+                                <input
+                                    type="text"
+                                    list="lista-colegios"
+                                    value={formDescuento.institucion}
+                                    onChange={(e) => setFormDescuento({ ...formDescuento, institucion: e.target.value.toUpperCase() })}
+                                    placeholder="Ej: D UNI"
+                                    required
+                                    className="w-full p-2 border rounded-lg text-sm uppercase font-bold text-gray-800 bg-gray-50 focus:border-purple-500 focus:outline-none"
+                                />
+                                <datalist id="lista-colegios">
+                                    {colegiosSugeridos.map(col => (
+                                        <option key={col} value={col} />
+                                    ))}
+                                </datalist>
+                                <p className="text-[10px] text-gray-400 mt-1">Selecciona uno de la lista o escribe un nombre nuevo.</p>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Descuento por Inscrito (S/)</label>
+                                <input
+                                    type="number"
+                                    step="0.5"
+                                    min="0.5"
+                                    value={formDescuento.descuento}
+                                    onChange={(e) => setFormDescuento({ ...formDescuento, descuento: parseFloat(e.target.value) || 0 })}
+                                    required
+                                    className="w-full p-2 border rounded-lg text-sm bg-purple-50 text-purple-800 font-bold focus:border-purple-500 focus:outline-none"
+                                />
+                            </div>
+
+                            <div className="pt-4 flex space-x-2 border-t">
+                                {formDescuento.id && (
+                                    <button type="button" onClick={() => setFormDescuento({ id: "", institucion: "", descuento: 2 })} className="w-1/3 bg-gray-200 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-300 text-sm">
+                                        Cancelar
+                                    </button>
+                                )}
+                                <button type="submit" disabled={loadingDescuento} className={`flex-1 flex justify-center items-center py-3 rounded-lg font-bold text-white text-sm transition-colors ${formDescuento.id ? 'bg-amber-500 hover:bg-amber-600 shadow-md shadow-amber-500/20' : 'bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-600/20'} mt-4`}>
+                                    <Save className="w-5 h-5 mr-2" />
+                                    {loadingDescuento ? "Guardando..." : formDescuento.id ? "Actualizar Descuento" : "Asignar Descuento"}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div className="xl:col-span-2">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                            <h3 className="font-bold text-gray-800">Colegios con Descuento</h3>
+                            <span className="text-xs font-bold bg-purple-100 text-purple-700 px-3 py-1 rounded-full">{descuentos.length} Registros</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm border-collapse">
+                                <thead className="bg-white border-b">
+                                    <tr>
+                                        <th className="p-4 text-xs font-bold text-gray-500 uppercase">Institución</th>
+                                        <th className="p-4 text-xs font-bold text-gray-500 uppercase">Descuento / Alumno</th>
+                                        <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {descuentos.length === 0 ? (
+                                        <tr><td colSpan={3} className="p-8 text-center text-gray-400">No hay descuentos por colegio configurados.</td></tr>
+                                    ) : (
+                                        descuentos.map((desc: any) => (
+                                            <tr key={desc.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="p-4">
+                                                    <span className="font-bold text-gray-800 flex items-center">
+                                                        <Building2 className="w-4 h-4 mr-2 text-purple-500" />
+                                                        {desc.institucion}
+                                                    </span>
+                                                </td>
+                                                <td className="p-4 font-black text-purple-600">
+                                                    - S/ {desc.descuento.toFixed(2)}
+                                                </td>
+                                                <td className="p-4">
+                                                    <div className="flex justify-center space-x-2">
+                                                        <button onClick={() => editarDescuento(desc)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Editar">
+                                                            <Edit2 className="w-4 h-4" />
+                                                        </button>
+                                                        <button onClick={() => eliminarDescuento(desc.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))

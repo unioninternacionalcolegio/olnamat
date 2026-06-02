@@ -1,6 +1,7 @@
+// app/(dashboard)/delegado/inscribir/FormInscripcion.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
 import { Plus, Trash2, Calculator, Info, Image as ImageIcon, Clock, Building2, Ticket, CheckCircle, XCircle, Wallet, Landmark, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -32,12 +33,14 @@ export default function FormInscripcion({
     precios,
     userInstitucion = "",
     userTipoColegio = "ESTATAL",
-    nivelFijo
+    nivelFijo,
+    descuentoPorColegio = 0 // NUEVO PROP DE DESCUENTO
 }: {
     precios: any[],
     userInstitucion?: string,
     userTipoColegio?: string,
-    nivelFijo?: "INICIAL" | "PRIMARIA" | "SECUNDARIA"
+    nivelFijo?: "INICIAL" | "PRIMARIA" | "SECUNDARIA",
+    descuentoPorColegio?: number
 }) {
     const router = useRouter()
     const [loading, setLoading] = useState(false)
@@ -99,8 +102,24 @@ export default function FormInscripcion({
         setOpsDuplicadasLocal(duplicadas);
     }, [pagosWatch]);
 
+    // ---> NUEVO: VALIDACIÓN ESTRICTA DE GRADOS EN TIEMPO REAL
+    const alumnosConErroresDeGrado = useMemo(() => {
+        return alumnosWatch.map((alum, index) => {
+            const nivel = alum.nivel as keyof typeof OPCIONES_GRADOS;
+            if (!OPCIONES_GRADOS[nivel]) return index; // El nivel no existe
+
+            // Buscar coincidencia exacta (ignorando mayúsculas/minúsculas por si lo teclean)
+            const gradoValido = OPCIONES_GRADOS[nivel].find(g => g.toLowerCase() === (alum.gradoOEdad || "").toLowerCase());
+            if (!gradoValido) return index; // El grado no pertenece al nivel
+
+            return -1;
+        }).filter(i => i !== -1);
+    }, [alumnosWatch]);
+
     // ---> VALIDAR TARIFAS 0.00 O CONFIG NO ENCONTRADA EN TIEMPO REAL
-    const hasInvalidConfigs = alumnosWatch.some((alum: any) => {
+    const hasInvalidConfigs = alumnosWatch.some((alum: any, index) => {
+        if (alumnosConErroresDeGrado.includes(index)) return true; // Si el grado está mal, la config está mal
+
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad);
         if (!config) return true; // Inválido si no existe
 
@@ -108,16 +127,23 @@ export default function FormInscripcion({
         if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
         if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
 
-        return costo === 0; // Inválido si la tarifa es exactamente 0.00
+        return costo <= 0; // Inválido si la tarifa es 0.00 o menor
     });
 
-    const subTotalPagar = alumnosWatch.reduce((acc, alum) => {
+    // ---> CÁLCULO DE PRECIOS CON DESCUENTO
+    const subTotalPagar = alumnosWatch.reduce((acc, alum, index) => {
+        if (alumnosConErroresDeGrado.includes(index)) return acc; // No sumar si hay error de grado
+
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad)
-        if (!config) return acc; // Si no hay config, suma 0 y salta la alerta del hasInvalidConfigs
+        if (!config) return acc;
 
         let costo = config.costoEstatalReg;
         if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
         if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
+
+        // NUEVO: APLICAMOS EL DESCUENTO POR COLEGIO AL ESTUDIANTE
+        costo = Math.max(0, costo - (descuentoPorColegio || 0));
+
         return acc + costo;
     }, 0)
 
@@ -129,27 +155,40 @@ export default function FormInscripcion({
 
     // ---> IMPORTACIÓN ACUMULATIVA DE EXCEL
     const handleImportedData = (nuevosAlumnos: any[]) => {
+        let contadorErrores = 0;
+
         const alumnosConColegio = nuevosAlumnos.map(alum => {
-            const nivelLimpiado = (nivelFijo || alum.nivel || "PRIMARIA") as keyof typeof OPCIONES_GRADOS;
-            const gradoLimpiado = alum.gradoOEdad || OPCIONES_GRADOS[nivelLimpiado][0];
+            const nivelRaw = (nivelFijo || alum.nivel || "PRIMARIA").toUpperCase().trim();
+            const gradoRaw = (alum.gradoOEdad || "").trim();
+
+            let nivelLimpiado = "PRIMARIA";
+            if (OPCIONES_GRADOS[nivelRaw as keyof typeof OPCIONES_GRADOS]) {
+                nivelLimpiado = nivelRaw;
+            }
+
+            // Aquí solo validamos si coincide, si no coincide, dejamos el "malo" para que el validador en tiempo real lo marque de rojo.
+            const esGradoValido = OPCIONES_GRADOS[nivelLimpiado as keyof typeof OPCIONES_GRADOS]?.find(g => g.toLowerCase() === gradoRaw.toLowerCase());
+
+            if (!esGradoValido) contadorErrores++;
 
             return {
                 ...alum,
                 nivel: nivelLimpiado,
-                gradoOEdad: gradoLimpiado,
+                gradoOEdad: esGradoValido || gradoRaw, // Si es válido, lo normalizamos, si no, metemos el raw para que lo vean.
                 tipoColegio: userTipoColegio,
                 institucion: userInstitucion
             }
         });
 
-        // Verificamos si la lista actual tiene un solo elemento y está vacío (el que sale por defecto)
+        if (contadorErrores > 0) {
+            alert(`¡Atención! Hemos detectado ${contadorErrores} alumnos con el Nivel o Grado mal digitados en tu Excel.\n\nPor favor, revisa las casillas marcadas en ROJO y corrígelas seleccionando la opción correcta.`);
+        }
+
         const isDefaultEmpty = alumnosWatch.length === 1 && !alumnosWatch[0].dni && !alumnosWatch[0].nombres && !alumnosWatch[0].apellidos;
 
         if (isDefaultEmpty) {
-            // Si está vacío, reemplazamos
             setValue("alumnos", alumnosConColegio);
         } else {
-            // Si ya hay datos registrados, AÑADIMOS los de Excel abajo
             appendAlumno(alumnosConColegio);
         }
     }
@@ -221,14 +260,18 @@ export default function FormInscripcion({
             // 🛡️ VALIDACIÓN TOTAL (ESCUDO FINAL) 🛡️
             // ==========================================
 
-            // 0. Validar Tarifas 0.00 o Configuraciones Rota
+            if (alumnosConErroresDeGrado.length > 0) {
+                alert("❌ Tienes alumnos con Nivel o Grado incorrectos (marcados en rojo). Por favor corrige las opciones.");
+                setLoading(false);
+                return;
+            }
+
             if (hasInvalidConfigs) {
                 alert("❌ Tienes alumnos con 'Configuración no encontrada' o con 'Tarifa S/ 0.00'. Por favor corrige el Nivel/Grado de esos estudiantes antes de continuar.");
                 setLoading(false);
                 return;
             }
 
-            // 1. Verificar DNIs duplicados localmente (en el formulario)
             const dnisList = data.alumnos.map((a: any) => a.dni).filter(Boolean);
             const dnisUnicos = new Set(dnisList);
             if (dnisUnicos.size !== dnisList.length) {
@@ -237,7 +280,6 @@ export default function FormInscripcion({
                 return;
             }
 
-            // 2. Verificar DNIs duplicados en la Base de Datos
             const resDni = await fetch('/api/estudiantes/verificar-dnis', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ dnis: Array.from(dnisUnicos) })
@@ -249,7 +291,6 @@ export default function FormInscripcion({
                 return;
             }
 
-            // 3. Verificar Operaciones duplicadas localmente (en el formulario)
             const opsList = data.pagos
                 .filter((p: any) => p.metodo !== "EFECTIVO" && p.numeroOperacion)
                 .map((p: any) => p.numeroOperacion.trim());
@@ -260,7 +301,6 @@ export default function FormInscripcion({
                 return;
             }
 
-            // 4. Verificar Operaciones duplicadas en la Base de Datos
             for (const op of Array.from(opsUnicas)) {
                 const resOp = await fetch(`/api/pagos/verificar?operacion=${op}`);
                 const dbOpData = await resOp.json();
@@ -272,7 +312,7 @@ export default function FormInscripcion({
             }
 
             // ==========================================
-            // SI PASA EL ESCUDO, SUBIMOS LAS IMÁGENES Y PROCESAMOS
+            // SUBIR IMÁGENES Y PROCESAR
             // ==========================================
 
             const pagosProcesados = await Promise.all(data.pagos.map(async (pago: any, index: number) => {
@@ -333,8 +373,8 @@ export default function FormInscripcion({
         }
     }
 
-    // El botón se bloquea si hay errores visuales evidentes O CONFIGURACIONES INVÁLIDAS
-    const isBotonBloqueado = loading || alumnosWatch.length === 0 || hasInvalidConfigs || dnisDuplicadosDB.length > 0 || dnisDuplicadosLocal.length > 0 || opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0 || (totalFinal > 0 && diferencia !== 0);
+    // El botón se bloquea si hay errores visuales evidentes O CONFIGURACIONES INVÁLIDAS O GRADOS INVÁLIDOS
+    const isBotonBloqueado = loading || alumnosWatch.length === 0 || hasInvalidConfigs || alumnosConErroresDeGrado.length > 0 || dnisDuplicadosDB.length > 0 || dnisDuplicadosLocal.length > 0 || opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0 || (totalFinal > 0 && diferencia !== 0);
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
@@ -378,22 +418,27 @@ export default function FormInscripcion({
                 <div className="space-y-6">
                     {alumnosFields.map((field, index) => {
                         const nivelActual = (nivelFijo || alumnosWatch[index]?.nivel || "PRIMARIA") as keyof typeof OPCIONES_GRADOS;
-                        const gradoActual = alumnosWatch[index]?.gradoOEdad || OPCIONES_GRADOS[nivelActual][0];
+                        const gradoActual = alumnosWatch[index]?.gradoOEdad || "";
                         const tipoColegioActual = userTipoColegio;
 
-                        const configAlumno = precios.find(p => p.nivel === nivelActual && p.gradoOEdad === gradoActual);
-                        let costoAlumno = 0;
-                        if (configAlumno) {
-                            if (tipoColegioActual === 'ESTATAL') costoAlumno = configAlumno.costoEstatalReg;
-                            if (tipoColegioActual === 'PARTICULAR') costoAlumno = configAlumno.costoParticularReg;
-                            if (tipoColegioActual === 'LIBRE') costoAlumno = configAlumno.costoLibreReg;
-                        }
-
+                        const hasGradoError = alumnosConErroresDeGrado.includes(index);
                         const hasDniLocalError = dnisDuplicadosLocal.includes(index);
                         const hasDniDbError = dnisDuplicadosDB.includes(index);
 
+                        const configAlumno = precios.find(p => p.nivel === nivelActual && p.gradoOEdad === gradoActual);
+
+                        let costoAlumno = 0;
+                        if (configAlumno && !hasGradoError) {
+                            if (tipoColegioActual === 'ESTATAL') costoAlumno = configAlumno.costoEstatalReg;
+                            if (tipoColegioActual === 'PARTICULAR') costoAlumno = configAlumno.costoParticularReg;
+                            if (tipoColegioActual === 'LIBRE') costoAlumno = configAlumno.costoLibreReg;
+
+                            // APLICAR DESCUENTO VISUAL (Asegurando que no baje de 0)
+                            costoAlumno = Math.max(0, costoAlumno - (descuentoPorColegio || 0));
+                        }
+
                         return (
-                            <div key={field.id} className="p-5 bg-gray-50 rounded-xl border border-gray-200 relative shadow-sm hover:shadow-md transition-shadow">
+                            <div key={field.id} className={`p-5 rounded-xl border relative shadow-sm hover:shadow-md transition-shadow ${hasGradoError ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
                                 {alumnosFields.length > 1 && (
                                     <button type="button" onClick={() => removeAlumno(index)} className="absolute -top-3 -right-3 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-full transition-colors shadow-sm" title="Eliminar Alumno">
                                         <Trash2 className="w-4 h-4" />
@@ -415,13 +460,13 @@ export default function FormInscripcion({
 
                                         {hasDniDbError && !hasDniLocalError && (
                                             <div className="absolute top-[-30px] left-0 bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce">
-                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI ya en Base de Datos
+                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI ya registrado
                                                 <div className="absolute -bottom-1 left-4 w-2 h-2 bg-red-600 rotate-45"></div>
                                             </div>
                                         )}
                                         {hasDniLocalError && (
                                             <div className="absolute top-[-30px] left-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce whitespace-nowrap">
-                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI duplicado en este formulario
+                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI repetido aquí
                                                 <div className="absolute -bottom-1 left-4 w-2 h-2 bg-orange-500 rotate-45"></div>
                                             </div>
                                         )}
@@ -439,7 +484,7 @@ export default function FormInscripcion({
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                                     <div className="md:col-span-1">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nivel / Grado</label>
-                                        <div className="flex space-x-2">
+                                        <div className="flex space-x-2 relative">
                                             {/* AUTO-CAMBIO DE GRADO AL SELECCIONAR NUEVO NIVEL */}
                                             <select
                                                 {...register(`alumnos.${index}.nivel`, {
@@ -448,20 +493,35 @@ export default function FormInscripcion({
                                                         setValue(`alumnos.${index}.gradoOEdad`, OPCIONES_GRADOS[nuevoNivel][0]);
                                                     }
                                                 })}
-                                                className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`}
+                                                className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${hasGradoError ? "border-red-400 bg-red-100 text-red-700" : nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`}
                                                 tabIndex={nivelFijo ? -1 : 0}
                                             >
                                                 {nivelFijo ? <option value={nivelFijo}>{nivelFijo}</option> : <><option value="INICIAL">INICIAL</option><option value="PRIMARIA">PRIMARIA</option><option value="SECUNDARIA">SECUNDARIA</option></>}
                                             </select>
-                                            <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700" required>
-                                                {OPCIONES_GRADOS[nivelActual].map(grado => <option key={grado} value={grado}>{grado}</option>)}
-                                            </select>
+
+                                            {hasGradoError ? (
+                                                <input
+                                                    {...register(`alumnos.${index}.gradoOEdad`)}
+                                                    className="w-1/2 p-2.5 border rounded-lg text-sm bg-red-100 text-red-700 border-red-400 font-bold"
+                                                    title="Escribe un grado válido o vuelve a elegir el nivel"
+                                                />
+                                            ) : (
+                                                <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700" required>
+                                                    {OPCIONES_GRADOS[nivelActual]?.map(grado => <option key={grado} value={grado}>{grado}</option>)}
+                                                </select>
+                                            )}
+
+                                            {hasGradoError && (
+                                                <div className="absolute top-11 left-0 text-[10px] text-red-600 font-black bg-white px-2 py-0.5 rounded shadow z-10 w-full">
+                                                    Grado Inválido
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
                                     <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="md:col-span-1">
-                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo Colegio (No editable)</label>
+                                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Tipo Colegio</label>
                                             <select
                                                 {...register(`alumnos.${index}.tipoColegio`)}
                                                 value={userTipoColegio}
@@ -489,16 +549,16 @@ export default function FormInscripcion({
                                     </div>
                                 </div>
 
-                                <div className={`flex flex-col sm:flex-row justify-between items-center p-3 rounded-lg border text-sm ${configAlumno && costoAlumno > 0 ? "bg-white border-blue-100" : "bg-red-50 border-red-200"}`}>
+                                <div className={`flex flex-col sm:flex-row justify-between items-center p-3 rounded-lg border text-sm ${configAlumno && !hasGradoError ? "bg-white border-blue-100" : "bg-red-50 border-red-200"}`}>
                                     <div className="flex items-center font-medium mb-2 sm:mb-0">
-                                        <Clock className={`w-4 h-4 mr-2 ${configAlumno && costoAlumno > 0 ? "text-blue-500" : "text-red-500"}`} />
-                                        {configAlumno && costoAlumno > 0 ? (
+                                        <Clock className={`w-4 h-4 mr-2 ${configAlumno && !hasGradoError ? "text-blue-500" : "text-red-500"}`} />
+                                        {configAlumno && !hasGradoError ? (
                                             <span className="text-blue-800"><strong>{configAlumno.turno}</strong> ({configAlumno.horaInicio} - {configAlumno.horaFin})</span>
                                         ) : (
-                                            <span className="text-red-600 font-bold">¡Tarifa no configurada para este Grado!</span>
+                                            <span className="text-red-600 font-bold">¡Tarifa no configurada o Grado Inválido!</span>
                                         )}
                                     </div>
-                                    <div className={`flex items-center font-bold px-3 py-1 rounded-full ${configAlumno && costoAlumno > 0 ? "text-green-700 bg-green-50" : "text-red-700 bg-red-100"}`}>
+                                    <div className={`flex items-center font-bold px-3 py-1 rounded-full ${configAlumno && !hasGradoError ? "text-green-700 bg-green-50" : "text-red-700 bg-red-100"}`}>
                                         <Ticket className="w-4 h-4 mr-1" /> Tarifa: S/ {costoAlumno.toFixed(2)}
                                     </div>
                                 </div>
@@ -588,7 +648,7 @@ export default function FormInscripcion({
                             </div>
                         )
                     })}
-                    {totalFinal === 0 && <p className="text-sm text-green-600 font-bold p-4 bg-green-50 rounded-lg flex items-center"><CheckCircle className="w-5 h-5 mr-2" /> El total está cubierto por el cupón. No se requieren pagos adicionales.</p>}
+                    {totalFinal === 0 && <p className="text-sm text-green-600 font-bold p-4 bg-green-50 rounded-lg flex items-center"><CheckCircle className="w-5 h-5 mr-2" /> El total está cubierto por el cupón o descuentos. No se requieren pagos adicionales.</p>}
                 </div>
 
                 <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white space-y-6">
@@ -611,7 +671,19 @@ export default function FormInscripcion({
                     </div>
 
                     <div className="space-y-2 text-sm text-blue-100 border-b border-blue-500/50 pb-4">
-                        <div className="flex justify-between"><span>Estudiantes Inscriptos ({alumnosWatch.length}):</span><span>S/ {subTotalPagar.toFixed(2)}</span></div>
+                        <div className="flex justify-between">
+                            <span>Estudiantes Inscriptos ({alumnosWatch.length - alumnosConErroresDeGrado.length}):</span>
+                            <span>S/ {subTotalPagar.toFixed(2)}</span>
+                        </div>
+
+                        {/* AVISO DEL DESCUENTO POR COLEGIO */}
+                        {descuentoPorColegio > 0 && (
+                            <div className="flex justify-between text-yellow-300 font-bold text-[10px] bg-yellow-900/30 px-2 py-1 rounded">
+                                <span>🎉 DESC. COLEGIO: S/ {descuentoPorColegio.toFixed(2)} x Alumno</span>
+                                <span>¡APLICADO!</span>
+                            </div>
+                        )}
+
                         {cuponAplicado && <div className="flex justify-between text-green-300 font-bold"><span>Descuento Cupón:</span><span>- S/ {cuponAplicado.monto.toFixed(2)}</span></div>}
                     </div>
 

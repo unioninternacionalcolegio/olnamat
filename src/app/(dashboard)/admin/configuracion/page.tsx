@@ -1,3 +1,4 @@
+// app/(dashboard)/admin/configuracion/page.tsx
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
@@ -20,10 +21,43 @@ export default async function ConfiguracionPage() {
         ]
     })
 
-    // 💉 NUEVO (Cirugía): Traemos los cupones desde la base de datos
+    // Traemos los cupones desde la base de datos
     const cupones = await prisma.cupon.findMany({
         orderBy: { createdAt: 'desc' }
     })
+
+    // 💉 NUEVO: Traemos los descuentos por colegio
+    const descuentos = await prisma.descuentoColegio.findMany({
+        orderBy: { createdAt: 'desc' }
+    })
+
+    // 💉 CORRECCIÓN TS: Quitamos el "not: null" del where. 
+    // Prisma nos traerá los valores únicos y nosotros ignoramos los vacíos en el JS de abajo.
+    const usuariosColegios = await prisma.user.findMany({
+        select: { institucion: true },
+        distinct: ['institucion']
+    })
+
+    const estudiantesColegios = await prisma.estudiante.findMany({
+        select: { institucion: true },
+        distinct: ['institucion']
+    })
+
+    const colegiosSet = new Set<string>()
+
+    usuariosColegios.forEach(u => {
+        if (u.institucion && u.institucion.trim() !== "") {
+            colegiosSet.add(u.institucion.toUpperCase().replace("LIBRE-", "").trim())
+        }
+    })
+
+    estudiantesColegios.forEach(e => {
+        if (e.institucion && e.institucion.trim() !== "") {
+            colegiosSet.add(e.institucion.toUpperCase().replace("LIBRE-", "").trim())
+        }
+    })
+
+    const colegiosUnicos = Array.from(colegiosSet).sort()
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
@@ -32,8 +66,12 @@ export default async function ConfiguracionPage() {
                 <p className="text-gray-600">Define los precios, cantidad de preguntas y reglas de calificación por cada grado.</p>
             </div>
 
-            {/* 💉 NUEVO (Cirugía): Pasamos los cupones al componente */}
-            <PanelConfiguracion dataInicial={configuraciones} cuponesIniciales={cupones} />
+            <PanelConfiguracion
+                dataInicial={configuraciones}
+                cuponesIniciales={cupones}
+                descuentosIniciales={descuentos}
+                colegiosSugeridos={colegiosUnicos}
+            />
         </div>
     )
 }
