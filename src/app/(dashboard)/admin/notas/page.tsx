@@ -1,5 +1,4 @@
 //app/(dashboard)/admin/notas/page.tsx
-//app/(dashboard)/admin/notas/page.tsx
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"

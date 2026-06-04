@@ -1,4 +1,3 @@
-//app/(dashboard)/admin/notas/PanelNotas.tsx
 "use client"
 
 import { useState, useMemo, useRef, useEffect } from "react"
@@ -109,9 +108,10 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
 
             if (alumno.resultado.horaSalida) {
                 const d = new Date(alumno.resultado.horaSalida)
-                let h = d.getHours()
-                const m = d.getMinutes()
-                const s = d.getSeconds()
+                // Usamos getUTC para leer los números literales que mandamos desde la API
+                let h = d.getUTCHours()
+                const m = d.getUTCMinutes()
+                const s = d.getUTCSeconds()
                 const isPM = h >= 12
 
                 setAmPm(isPM ? "PM" : "AM")
@@ -154,7 +154,12 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
             if (ampm === "PM" && hFinal < 12) hFinal += 12
             if (ampm === "AM" && hFinal === 12) hFinal = 0
 
+            // Seteamos la hora para mandarla a la API
             fechaSalida.setHours(hFinal, parseInt(minuto), parseInt(segundo), 0)
+
+            // Para la actualización visual local inmediata (le ponemos UTC para que coincida con lo que escupirá la DB)
+            const fechaVisualLocal = new Date()
+            fechaVisualLocal.setUTCHours(hFinal, parseInt(minuto), parseInt(segundo), 0)
 
             const res = await fetch("/api/resultados", {
                 method: "POST",
@@ -184,7 +189,7 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                             incorrectas,
                             enBlanco,
                             puntajeTotal,
-                            horaSalida: fechaSalida.toISOString(),
+                            horaSalida: fechaVisualLocal.toISOString(), // Usamos la fecha engañada para que getUTCHours la lea bien en vivo
                             createdAt: new Date().toISOString()
                         }
                     }
@@ -230,6 +235,7 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                     return resB.puntajeTotal - resA.puntajeTotal
                 }
                 // 2. Empate: El menor tiempo gana (Ascendente)
+                // Extraemos el tiempo absoluto usando getTime()
                 const timeA = new Date(resA.horaSalida).getTime()
                 const timeB = new Date(resB.horaSalida).getTime()
                 return timeA - timeB
@@ -243,13 +249,14 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
         })
     }, [localEstudiantes, filtroNivel, filtroGrado])
 
-    // Función para formatear la hora en la tabla
+    // Función para formatear la hora en la tabla tal cual viene de DB
     const formatearHora = (isoString: string) => {
         if (!isoString) return "-"
         const d = new Date(isoString)
-        let h = d.getHours()
-        const m = d.getMinutes().toString().padStart(2, '0')
-        const s = d.getSeconds().toString().padStart(2, '0')
+        // Usamos getUTC para saltarnos el cambio de zona horaria del navegador
+        let h = d.getUTCHours()
+        const m = d.getUTCMinutes().toString().padStart(2, '0')
+        const s = d.getUTCSeconds().toString().padStart(2, '0')
         const esPM = h >= 12
         h = h % 12 || 12
         return `${h}:${m}:${s} ${esPM ? 'PM' : 'AM'}`

@@ -1,3 +1,4 @@
+// app/api/resultados/procesar/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Solucionario no configurado para este examen" }, { status: 404 });
         }
 
-        // 4. Buscar al estudiante por DNI (Asumiendo que DNI es único por concurso)
+        // 4. Buscar al estudiante por DNI
         const estudiante = await prisma.estudiante.findUnique({
             where: { dni: dniEstudiante }
         });
@@ -37,22 +38,39 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: `Estudiante con DNI ${dniEstudiante} no encontrado` }, { status: 404 });
         }
 
-        // 5. Calcular el puntaje comparando con el solucionario
-        const claves = config.clavesRespuestas as string[];
+        // 5. Calcular el puntaje y ARMAR EL JSON DE RESPUESTAS DETALLADAS
+        const claves = config.clavesRespuestas as any;
         let correctas = 0;
         let incorrectas = 0;
         let enBlanco = 0;
 
+        // 💉 AQUÍ CREAMOS EL JSON QUE ALIMENTARÁ AL MODAL DEL FRONTEND
+        const respuestasDetalle: any[] = [];
+
         respuestas.forEach((marcada: string, index: number) => {
-            const correcta = claves[index];
+            // Soportamos si el solucionario es un Array ["A", "B"] o un Objeto {"1":"A", "2":"B"}
+            const correcta = Array.isArray(claves) ? claves[index] : claves[(index + 1).toString()];
+            const numPregunta = index + 1;
+            let estado = "INCORRECTA";
+            let marcaFinal = marcada;
 
             if (!marcada || marcada === "BLANCO" || marcada === "") {
                 enBlanco++;
+                estado = "BLANCO";
+                marcaFinal = "-";
             } else if (marcada === correcta) {
                 correctas++;
+                estado = "CORRECTA";
             } else {
                 incorrectas++;
+                estado = "INCORRECTA";
             }
+
+            respuestasDetalle.push({
+                pregunta: numPregunta,
+                marcada: marcaFinal,
+                estado: estado
+            });
         });
 
         const puntajeTotal =
@@ -60,16 +78,31 @@ export async function POST(req: Request) {
             (incorrectas * Math.abs(config.puntosIncorrecto)) +
             (enBlanco * config.puntosBlanco);
 
-        // Formatear hora de salida a formato Date para la DB
+        // 6. Formatear hora (Usamos UTC para blindar la hora exacta y no sufrir cambios de zona horaria)
         let fechaHoraSalida = null;
         if (horaSalida) {
-            const [horas, minutos] = horaSalida.split(':');
+            const [horasStr, minutosStr, segundosStr] = horaSalida.split(':');
+            let horas = parseInt(horasStr, 10);
+            const minutos = parseInt(minutosStr, 10);
+            const segundos = parseInt(segundosStr || "0", 10);
+
+            // 💉 MAGIA: Si la hora es 1, 2, 3, 4 o 5, la pasamos a formato 24h sumándole 12 (13, 14, 15, 16, 17)
+            if (horas >= 1 && horas <= 5) {
+                horas += 12;
+            }
+
             const ahora = new Date();
-            ahora.setHours(parseInt(horas, 10), parseInt(minutos, 10), 0, 0);
+            // setUTCHours fuerza a guardar los números literales que mandó Python, ya convertidos si aplicó
+            ahora.setUTCHours(
+                horas,
+                minutos,
+                segundos,
+                0 // Milisegundos
+            );
             fechaHoraSalida = ahora;
         }
 
-        // 6. Guardar o actualizar el resultado en la BD
+        // 7. Guardar o actualizar el resultado en la BD (INCLUYENDO respuestasDetalle)
         const resultado = await prisma.resultadoExamen.upsert({
             where: { estudianteId: estudiante.id },
             update: {
@@ -78,6 +111,7 @@ export async function POST(req: Request) {
                 enBlanco,
                 puntajeTotal,
                 horaSalida: fechaHoraSalida,
+                respuestasDetalle: respuestasDetalle, // 💉 GUARDAMOS EL JSON
             },
             create: {
                 estudianteId: estudiante.id,
@@ -86,11 +120,12 @@ export async function POST(req: Request) {
                 enBlanco,
                 puntajeTotal,
                 horaSalida: fechaHoraSalida,
-                revisadorId: null // Opcional: Podrías mandar el ID de la PC que revisó
+                respuestasDetalle: respuestasDetalle, // 💉 GUARDAMOS EL JSON
+                revisadorId: null
             }
         });
 
-        // 7. Devolver datos para que Python arme el Excel local
+        // 8. Devolver datos para que Python arme el Excel local
         return NextResponse.json({
             success: true,
             datos: {
@@ -103,7 +138,7 @@ export async function POST(req: Request) {
                 incorrectas,
                 enBlanco,
                 puntajeTotal,
-                horaSalida
+                horaSalida // Devuelve el string tal cual para el Excel de Python
             }
         });
 

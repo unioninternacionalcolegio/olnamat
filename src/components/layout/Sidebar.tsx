@@ -1,4 +1,3 @@
-
 "use client"
 import { useState, useEffect } from "react"
 import Link from "next/link"
@@ -19,10 +18,33 @@ export default function Sidebar({ userRole }: { userRole: string }) {
     const [isCollapsed, setIsCollapsed] = useState(false)
     const [isMobileOpen, setIsMobileOpen] = useState(false)
 
+    // 💉 NUEVO: Estado para guardar nuestros numeritos
+    const [stats, setStats] = useState({ pagosPendientes: 0, notasSubidas: 0 })
+
     // Cerrar sidebar móvil al cambiar de ruta
     useEffect(() => {
         setIsMobileOpen(false)
     }, [pathname])
+
+    // 💉 NUEVO: Consultar las estadísticas cada vez que cambiamos de página
+    useEffect(() => {
+        const fetchStats = async () => {
+            try {
+                const res = await fetch('/api/stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    setStats(data);
+                }
+            } catch (error) {
+                console.error("Error cargando stats del menú");
+            }
+        }
+
+        // Solo pedimos los stats si es un rol de staff
+        if (["ADMINISTRADOR", "ASISTENTE", "REVISADOR"].includes(userRole)) {
+            fetchStats();
+        }
+    }, [pathname, userRole])
 
     const toggleMenu = (menuName: string) => {
         setOpenMenus(prev => ({ ...prev, [menuName]: !prev[menuName] }))
@@ -32,11 +54,27 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         // --- RUTAS DE ADMINISTRACIÓN Y STAFF ---
         { name: "Inicio Admin", href: "/admin", icon: Home, roles: ["ADMINISTRADOR", "ASISTENTE"] },
         { name: "Lista Alumnos", href: "/admin/alumnos", icon: Users, roles: ["ADMINISTRADOR", "ASISTENTE"] },
-        { name: "Validar Pagos", href: "/admin/ver-pagos", icon: Eye, roles: ["ADMINISTRADOR", "ASISTENTE"] },
+        {
+            name: "Validar Pagos",
+            href: "/admin/ver-pagos",
+            icon: Eye,
+            roles: ["ADMINISTRADOR", "ASISTENTE"],
+            badge: stats.pagosPendientes > 0 ? stats.pagosPendientes : undefined, // 💉 Notificación Roja
+            badgeColor: "bg-red-500 text-white shadow-sm shadow-red-500/50"
+        },
         { name: "Caja / Ventas", href: "/admin/caja", icon: CreditCard, roles: ["ADMINISTRADOR", "ASISTENTE"] },
-        { name: "Subir Notas", href: "/admin/notas", icon: ClipboardList, roles: ["ADMINISTRADOR", "REVISADOR"] },
+        {
+            name: "Subir Notas",
+            href: "/admin/notas",
+            icon: ClipboardList,
+            roles: ["ADMINISTRADOR", "REVISADOR"],
+            badge: stats.notasSubidas > 0 ? stats.notasSubidas : undefined, // 💉 Notificación Verde
+            badgeColor: "bg-green-500 text-white shadow-sm shadow-green-500/50"
+        },
+        { name: "Ranking Colegios", href: "/admin/premiacion-colegios", icon: Trophy, roles: ["ADMINISTRADOR"] },
         { name: "Resultados Oficiales", href: "/admin/resultados", icon: Trophy, roles: ["ADMINISTRADOR", "REVISADOR"] },
         { name: "Configuración", href: "/admin/configuracion", icon: Settings, roles: ["ADMINISTRADOR"] },
+        { name: "Fichas Oprticas", href: "/admin/pruebas", icon: Settings, roles: ["ADMINISTRADOR"] },
 
         // --- RUTAS DE DELEGADOS Y REPRESENTANTES ---
         { name: "Mi Panel", href: "/delegado", icon: LayoutDashboard, roles: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"] },
@@ -56,7 +94,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         {
             name: "Resultados",
             icon: Trophy,
-            roles: [ "REPRESENTANTE_IE"],
+            roles: ["REPRESENTANTE_IE"],
             subItems: [
                 { name: "General", href: "/delegado/resultados" },
                 { name: "Inicial", href: "/delegado/resultados/inicial" },
@@ -69,6 +107,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         { name: "Mi Panel", href: "/libre", icon: LayoutDashboard, roles: ["LIBRE"] },
         { name: "Resultados Oficiales", href: "/libre/resultados", icon: Trophy, roles: ["LIBRE"] },
     ]
+
     const filteredMenu = menuItems.filter(item => item.roles.includes(userRole))
 
     return (
@@ -188,6 +227,13 @@ export default function Sidebar({ userRole }: { userRole: string }) {
                             >
                                 <item.icon className={`w-5 h-5 transition-colors ${isParentActive ? "text-red-600" : "text-gray-400 group-hover:text-gray-600"}`} />
                                 {!isCollapsed && <span>{item.name}</span>}
+
+                                {/* 💉 AQUI RENDERIZAMOS EL BADGE SI EXISTE */}
+                                {item.badge !== undefined && !isCollapsed && (
+                                    <span className={`ml-auto px-2 py-0.5 text-[10px] font-black rounded-full ${item.badgeColor}`}>
+                                        {item.badge}
+                                    </span>
+                                )}
                             </Link>
                         )
                     })}

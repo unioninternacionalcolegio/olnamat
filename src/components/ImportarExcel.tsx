@@ -1,3 +1,4 @@
+// src/components/ImportarExcel.tsx
 "use client"
 
 import { useState } from "react"
@@ -63,7 +64,7 @@ export default function ImportarExcel({ onDataImported }: { onDataImported: (alu
                 const sheet = workbook.Sheets[workbook.SheetNames[0]]
                 const jsonData = XLSX.utils.sheet_to_json(sheet)
 
-                // 1. Mapeo inicial
+                // 1. Mapeo inicial (Traducción Nivel Dios)
                 const alumnosMapeados = jsonData.map((row: any) => {
                     const nivelLimpio = normalizarNivel(row.NIVEL || row.nivel || row.Nivel || "")
                     const gradoLimpio = normalizarGrado(row.GRADO || row.grado || row.Grado || row.EDAD || "", nivelLimpio)
@@ -76,39 +77,10 @@ export default function ImportarExcel({ onDataImported }: { onDataImported: (alu
                     }
                 })
 
-                // 2. Extraer DNIs para verificar
-                const dnisAVerificar = alumnosMapeados.map(a => a.dni).filter(dni => dni !== "")
-
-                // 3. Consultar a la API qué DNIs ya existen
-                let dnisRegistrados: string[] = []
-                if (dnisAVerificar.length > 0) {
-                    const res = await fetch('/api/estudiantes/verificar-dnis', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ dnis: dnisAVerificar })
-                    })
-                    if (res.ok) {
-                        const dataVerificada = await res.json()
-                        dnisRegistrados = dataVerificada.registrados || []
-                    }
-                }
-
-                // 4. Filtrar los alumnos: Dejamos pasar los que NO están en dnisRegistrados
-                const alumnosNuevos = alumnosMapeados.filter(alumno =>
-                    alumno.dni === "" || !dnisRegistrados.includes(alumno.dni)
-                )
-
-                const cantidadRechazados = alumnosMapeados.length - alumnosNuevos.length
-
-                // 5. Enviar los alumnos limpios al componente padre
-                onDataImported(alumnosNuevos)
-
-                // 6. Mostrar resumen al usuario
-                if (cantidadRechazados > 0) {
-                    alert(`✅ Se importaron ${alumnosNuevos.length} alumnos.\n❌ Se omitieron ${cantidadRechazados} alumnos porque su DNI ya estaba registrado.`)
-                } else {
-                    alert(`✅ Se importaron ${alumnosNuevos.length} estudiantes correctamente.`)
-                }
+                // 2. 💉 MAGIA: Pasamos TODOS los alumnos tal cual salieron del mapeo.
+                // Ya no omitimos nada aquí. El componente FormInscripcion se encargará
+                // de buscar duplicados en la BD y pintar de rojo todo lo que esté mal.
+                onDataImported(alumnosMapeados)
 
             } catch (error) {
                 console.error(error)
@@ -134,7 +106,7 @@ export default function ImportarExcel({ onDataImported }: { onDataImported: (alu
 
             <label className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-bold transition border ${loading ? 'bg-gray-100 text-gray-500 border-gray-200 cursor-not-allowed' : 'bg-green-50 text-green-700 hover:bg-green-100 cursor-pointer border-green-200'}`}>
                 <FileSpreadsheet className="w-5 h-5" />
-                <span>{loading ? "Verificando DNIs..." : "Importar Excel"}</span>
+                <span>{loading ? "Procesando..." : "Importar Excel"}</span>
                 <input
                     type="file"
                     accept=".xlsx, .xls, .csv"
