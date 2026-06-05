@@ -12,7 +12,17 @@ const getLocalToday = () => {
     const tzOffset = (new Date()).getTimezoneOffset() * 60000;
     return (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
 }
+const getLocalToday2 = () => {
+    const fecha = new Date();
+    fecha.setMonth(fecha.getMonth() - 1);   // ← un mes antes
 
+    // Formato YYYY-MM-DD en hora local
+    const year = fecha.getFullYear();
+    const month = String(fecha.getMonth() + 1).padStart(2, '0');
+    const day = String(fecha.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+};
 export default function ListaPagos({
     iniciales,
     currentUserId,
@@ -28,7 +38,7 @@ export default function ListaPagos({
 
     const [activeTab, setActiveTab] = useState<TabType>("TODOS")
     const [searchTerm, setSearchTerm] = useState("")
-    const [fechaInicio, setFechaInicio] = useState(getLocalToday())
+    const [fechaInicio, setFechaInicio] = useState(getLocalToday2())
     const [fechaFin, setFechaFin] = useState(getLocalToday())
     const [soloMisCobros, setSoloMisCobros] = useState(false)
     const [metodoFiltro, setMetodoFiltro] = useState<MetodoFiltro>(null)

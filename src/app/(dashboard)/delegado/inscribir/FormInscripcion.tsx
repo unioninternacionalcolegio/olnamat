@@ -1,9 +1,8 @@
-// app/(dashboard)/delegado/inscribir/FormInscripcion.tsx
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useMemo } from "react"
 import { useForm, useFieldArray } from "react-hook-form"
-import { Plus, Trash2, Calculator, Info, Image as ImageIcon, Clock, Building2, Ticket, CheckCircle, XCircle, Wallet, Landmark, AlertCircle } from "lucide-react"
+import { Plus, Trash2, Calculator, Image as ImageIcon, Clock, Building2, Ticket, CheckCircle, XCircle, Wallet, Landmark, AlertCircle } from "lucide-react"
 import { useRouter } from "next/navigation"
 import imageCompression from 'browser-image-compression'
 import ImportarExcel from "@/components/ImportarExcel"
@@ -34,7 +33,7 @@ export default function FormInscripcion({
     userInstitucion = "",
     userTipoColegio = "ESTATAL",
     nivelFijo,
-    descuentoPorColegio = 0 // NUEVO PROP DE DESCUENTO
+    descuentoPorColegio = 0
 }: {
     precios: any[],
     userInstitucion?: string,
@@ -45,14 +44,11 @@ export default function FormInscripcion({
     const router = useRouter()
     const [loading, setLoading] = useState(false)
 
-    // ESTADOS DE VALIDACIÓN VISUAL (Para UX)
-    const [dnisDuplicadosDB, setDnisDuplicadosDB] = useState<number[]>([])
-    const [dnisDuplicadosLocal, setDnisDuplicadosLocal] = useState<number[]>([])
-    const [opsDuplicadasDB, setOpsDuplicadasDB] = useState<number[]>([])
-    const [opsDuplicadasLocal, setOpsDuplicadasLocal] = useState<number[]>([])
+    // ESTADOS PARA LA BASE DE DATOS (Lo que ya existe en el sistema)
+    const [dnisDuplicadosDB, setDnisDuplicadosDB] = useState<string[]>([])
+    const [opsDuplicadasDB, setOpsDuplicadasDB] = useState<string[]>([])
 
     const [vouchersFiles, setVouchersFiles] = useState<Record<number, { file: File, preview: string }>>({})
-
     const [codigoCuponInput, setCodigoCuponInput] = useState("")
     const [cuponAplicado, setCuponAplicado] = useState<{ codigo: string, monto: number } | null>(null)
     const [estadoCupon, setEstadoCupon] = useState<"idle" | "loading" | "error">("idle")
@@ -83,155 +79,175 @@ export default function FormInscripcion({
     const alumnosWatch = watch("alumnos")
     const pagosWatch = watch("pagos")
 
-    // ---> VALIDACIÓN VISUAL EN TIEMPO REAL (LOCAL)
-    useEffect(() => {
-        const dnis = alumnosWatch.map(a => a.dni);
-        const duplicados = dnis.map((dni, index) => {
-            if (dni && dni.length > 0 && dnis.filter(d => d === dni).length > 1) return index;
-            return -1;
-        }).filter(i => i !== -1);
-        setDnisDuplicadosLocal(duplicados);
+    // =========================================================================
+    // ⚡ VALIDACIONES EN TIEMPO REAL (Pintado Mágico)
+    // =========================================================================
+
+    // 1. Detecta si escribes dos DNIs iguales en el mismo formulario (Naranja)
+    // Evaluamos TODOS los DNIs y si hay más de 1 igual, los pintará todos
+    const dnisDuplicadosLocal = useMemo(() => {
+        const dnis = alumnosWatch.map(a => a?.dni?.trim() || "");
+        const conteoDnis = dnis.reduce((acc, dni) => {
+            if (dni.length === 8) acc[dni] = (acc[dni] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.keys(conteoDnis).filter(dni => conteoDnis[dni] > 1);
     }, [alumnosWatch]);
 
-    useEffect(() => {
-        const ops = pagosWatch.map(p => p.numeroOperacion);
-        const duplicadas = ops.map((op, index) => {
-            if (op && op.length > 0 && pagosWatch[index].metodo !== "EFECTIVO" && ops.filter(o => o === op).length > 1) return index;
-            return -1;
-        }).filter(i => i !== -1);
-        setOpsDuplicadasLocal(duplicadas);
+    // 2. Detecta si escribes dos Operaciones iguales en el mismo formulario (Naranja)
+    const opsDuplicadasLocal = useMemo(() => {
+        const ops = pagosWatch.filter(p => p?.metodo !== "EFECTIVO").map(p => p?.numeroOperacion?.trim() || "");
+        const conteoOps = ops.reduce((acc, op) => {
+            if (op.length >= 4) acc[op] = (acc[op] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.keys(conteoOps).filter(op => conteoOps[op] > 1);
     }, [pagosWatch]);
 
-    // ---> NUEVO: VALIDACIÓN ESTRICTA DE GRADOS EN TIEMPO REAL
+    // 3. Detecta si el grado elegido no coincide con el nivel (Rojo)
     const alumnosConErroresDeGrado = useMemo(() => {
         return alumnosWatch.map((alum, index) => {
             const nivel = alum.nivel as keyof typeof OPCIONES_GRADOS;
-            if (!OPCIONES_GRADOS[nivel]) return index; // El nivel no existe
-
-            // Buscar coincidencia exacta (ignorando mayúsculas/minúsculas por si lo teclean)
+            if (!OPCIONES_GRADOS[nivel]) return index;
             const gradoValido = OPCIONES_GRADOS[nivel].find(g => g.toLowerCase() === (alum.gradoOEdad || "").toLowerCase());
-            if (!gradoValido) return index; // El grado no pertenece al nivel
-
+            if (!gradoValido) return index;
             return -1;
         }).filter(i => i !== -1);
     }, [alumnosWatch]);
 
-    // ---> VALIDAR TARIFAS 0.00 O CONFIG NO ENCONTRADA EN TIEMPO REAL
     const hasInvalidConfigs = alumnosWatch.some((alum: any, index) => {
-        if (alumnosConErroresDeGrado.includes(index)) return true; // Si el grado está mal, la config está mal
-
+        if (alumnosConErroresDeGrado.includes(index)) return true;
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad);
-        if (!config) return true; // Inválido si no existe
-
+        if (!config) return true;
         let costo = config.costoEstatalReg;
         if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
         if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
-
-        return costo <= 0; // Inválido si la tarifa es 0.00 o menor
+        return costo <= 0;
     });
 
-    // ---> CÁLCULO DE PRECIOS CON DESCUENTO
     const subTotalPagar = alumnosWatch.reduce((acc, alum, index) => {
-        if (alumnosConErroresDeGrado.includes(index)) return acc; // No sumar si hay error de grado
-
+        if (alumnosConErroresDeGrado.includes(index)) return acc;
         const config = precios.find(p => p.nivel === alum.nivel && p.gradoOEdad === alum.gradoOEdad)
         if (!config) return acc;
-
         let costo = config.costoEstatalReg;
         if (userTipoColegio === 'PARTICULAR') costo = config.costoParticularReg;
         if (userTipoColegio === 'LIBRE') costo = config.costoLibreReg;
-
-        // NUEVO: APLICAMOS EL DESCUENTO POR COLEGIO AL ESTUDIANTE
         costo = Math.max(0, costo - (descuentoPorColegio || 0));
-
         return acc + costo;
     }, 0)
 
     const descuentoMonto = cuponAplicado ? cuponAplicado.monto : 0
     const totalFinal = Math.max(0, subTotalPagar - descuentoMonto)
-
     const totalAbonado = pagosWatch.reduce((acc, p) => acc + (Number(p.monto) || 0), 0)
     const diferencia = totalFinal - totalAbonado
 
-    // ---> IMPORTACIÓN ACUMULATIVA DE EXCEL
-    const handleImportedData = (nuevosAlumnos: any[]) => {
-        let contadorErrores = 0;
+    // =========================================================================
+    // 🌐 CONSULTAS A LA BASE DE DATOS (Se activan onBlur o desde el Excel)
+    // =========================================================================
 
+    const verificarDniEnBaseDatos = async (dni: string) => {
+        const dniLimpio = dni?.trim();
+        if (!dniLimpio || dniLimpio.length < 8) {
+            setDnisDuplicadosDB(prev => prev.filter(d => d !== dniLimpio));
+            return;
+        }
+        try {
+            const res = await fetch('/api/estudiantes/verificar-dnis', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dnis: [dniLimpio] })
+            })
+            const data = await res.json()
+            if (data.registrados?.includes(dniLimpio)) {
+                setDnisDuplicadosDB(prev => Array.from(new Set([...prev, dniLimpio])))
+            } else {
+                setDnisDuplicadosDB(prev => prev.filter(d => d !== dniLimpio))
+            }
+        } catch (error) { console.error("Error verificando DNI:", error) }
+    }
+
+    const verificarOperacionEnBaseDatos = async (operacion: string) => {
+        const opLimpia = operacion?.trim();
+        if (!opLimpia || opLimpia.length < 4) {
+            setOpsDuplicadasDB(prev => prev.filter(o => o !== opLimpia));
+            return;
+        }
+        try {
+            const res = await fetch(`/api/pagos/verificar?operacion=${opLimpia}`)
+            const data = await res.json()
+            if (data.existe) {
+                setOpsDuplicadasDB(prev => Array.from(new Set([...prev, opLimpia])))
+            } else {
+                setOpsDuplicadasDB(prev => prev.filter(o => o !== opLimpia))
+            }
+        } catch (error) { console.error("Error verificando Operación:", error) }
+    }
+
+    // =========================================================================
+    // 📥 IMPORTACIÓN DE EXCEL Y FILTROS INMEDIATOS
+    // =========================================================================
+
+    const handleImportedData = async (nuevosAlumnos: any[]) => {
+        let errorGrados = 0;
+
+        // 1. Limpiamos y normalizamos la data del Excel
         const alumnosConColegio = nuevosAlumnos.map(alum => {
             const nivelRaw = (nivelFijo || alum.nivel || "PRIMARIA").toUpperCase().trim();
             const gradoRaw = (alum.gradoOEdad || "").trim();
-
             let nivelLimpiado = "PRIMARIA";
-            if (OPCIONES_GRADOS[nivelRaw as keyof typeof OPCIONES_GRADOS]) {
-                nivelLimpiado = nivelRaw;
-            }
+            if (OPCIONES_GRADOS[nivelRaw as keyof typeof OPCIONES_GRADOS]) nivelLimpiado = nivelRaw;
 
-            // Aquí solo validamos si coincide, si no coincide, dejamos el "malo" para que el validador en tiempo real lo marque de rojo.
             const esGradoValido = OPCIONES_GRADOS[nivelLimpiado as keyof typeof OPCIONES_GRADOS]?.find(g => g.toLowerCase() === gradoRaw.toLowerCase());
-
-            if (!esGradoValido) contadorErrores++;
+            if (!esGradoValido) errorGrados++;
 
             return {
                 ...alum,
+                dni: alum.dni ? alum.dni.toString().padStart(8, '0').trim() : "",
                 nivel: nivelLimpiado,
-                gradoOEdad: esGradoValido || gradoRaw, // Si es válido, lo normalizamos, si no, metemos el raw para que lo vean.
+                gradoOEdad: esGradoValido || gradoRaw,
                 tipoColegio: userTipoColegio,
                 institucion: userInstitucion
             }
         });
 
-        if (contadorErrores > 0) {
-            alert(`¡Atención! Hemos detectado ${contadorErrores} alumnos con el Nivel o Grado mal digitados en tu Excel.\n\nPor favor, revisa las casillas marcadas en ROJO y corrígelas seleccionando la opción correcta.`);
-        }
-
+        // 2. Insertamos en el formulario
         const isDefaultEmpty = alumnosWatch.length === 1 && !alumnosWatch[0].dni && !alumnosWatch[0].nombres && !alumnosWatch[0].apellidos;
+        if (isDefaultEmpty) setValue("alumnos", alumnosConColegio);
+        else appendAlumno(alumnosConColegio);
 
-        if (isDefaultEmpty) {
-            setValue("alumnos", alumnosConColegio);
-        } else {
-            appendAlumno(alumnosConColegio);
+        // 3. Verificamos DNIs en BD
+        const dnisNuevos = alumnosConColegio.map(a => a.dni).filter(d => d && d.length >= 8);
+        let errorDnisDB = 0;
+
+        if (dnisNuevos.length > 0) {
+            try {
+                const res = await fetch('/api/estudiantes/verificar-dnis', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dnis: dnisNuevos })
+                });
+                const data = await res.json();
+                if (data.registrados && data.registrados.length > 0) {
+                    setDnisDuplicadosDB(prev => Array.from(new Set([...prev, ...data.registrados])));
+                    errorDnisDB = data.registrados.length;
+                }
+            } catch (error) { console.error("Error validando importación:", error); }
         }
+
+        // 4. Mostramos el alert con un timeout para que React pinte TODO DE ROJO primero
+        setTimeout(() => {
+            if (errorGrados > 0 || errorDnisDB > 0) {
+                alert(`¡Atención! Hemos detectado errores en el Excel importado:\n\n` +
+                    (errorGrados > 0 ? `- ${errorGrados} alumnos tienen el Nivel o Grado mal escrito.\n` : '') +
+                    (errorDnisDB > 0 ? `- ${errorDnisDB} alumnos ya están registrados en el sistema.\n` : '') +
+                    `\nPor favor, revisa las casillas marcadas en ROJO o NARANJA en el formulario y corrígelas.`);
+            } else {
+                alert(`¡Excel importado correctamente! Verifica la lista antes de finalizar.`);
+            }
+        }, 300); // 300ms es tiempo suficiente para que el render se pinte de rojo antes de bloquear la pantalla
     }
 
     const handleVoucherChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0]
-        if (file) {
-            setVouchersFiles(prev => ({ ...prev, [index]: { file, preview: URL.createObjectURL(file) } }))
-        }
-    }
-
-    // VERIFICACIÓN VISUAL ON BLUR
-    const verificarDniEnBaseDatos = async (dni: string, index: number) => {
-        if (!dni || dni.length < 8) {
-            setDnisDuplicadosDB(prev => prev.filter(i => i !== index)); return;
-        }
-        try {
-            const res = await fetch('/api/estudiantes/verificar-dnis', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dnis: [dni] })
-            })
-            const data = await res.json()
-            if (data.registrados?.includes(dni) && !dnisDuplicadosDB.includes(index)) {
-                setDnisDuplicadosDB([...dnisDuplicadosDB, index])
-            } else if (!data.registrados?.includes(dni)) {
-                setDnisDuplicadosDB(prev => prev.filter(i => i !== index))
-            }
-        } catch (error) { console.error("Error verificando DNI:", error) }
-    }
-
-    const verificarOperacionEnBaseDatos = async (operacion: string, index: number) => {
-        if (!operacion || operacion.length < 4) {
-            setOpsDuplicadasDB(prev => prev.filter(i => i !== index)); return;
-        }
-        try {
-            const res = await fetch(`/api/pagos/verificar?operacion=${operacion.trim()}`)
-            const data = await res.json()
-            if (data.existe && !opsDuplicadasDB.includes(index)) {
-                setOpsDuplicadasDB([...opsDuplicadasDB, index])
-            } else if (!data.existe) {
-                setOpsDuplicadasDB(prev => prev.filter(i => i !== index))
-            }
-        } catch (error) { console.error("Error verificando Operación:", error) }
+        if (file) setVouchersFiles(prev => ({ ...prev, [index]: { file, preview: URL.createObjectURL(file) } }))
     }
 
     const verificarCupon = async () => {
@@ -240,80 +256,27 @@ export default function FormInscripcion({
         try {
             const res = await fetch(`/api/delegado/verificar-cupon?codigo=${codigoCuponInput.toUpperCase()}`)
             const data = await res.json()
-            if (!res.ok) {
-                setEstadoCupon("error"); setErrorCuponMsg(data.error || "Cupón inválido"); return;
-            }
+            if (!res.ok) { setEstadoCupon("error"); setErrorCuponMsg(data.error || "Cupón inválido"); return; }
             setCuponAplicado({ codigo: data.codigo, monto: data.monto })
             setEstadoCupon("idle"); setCodigoCuponInput("")
-        } catch (error) {
-            setEstadoCupon("error"); setErrorCuponMsg("Error al verificar")
-        }
+        } catch (error) { setEstadoCupon("error"); setErrorCuponMsg("Error al verificar") }
     }
+
+    // =========================================================================
+    // 🛡️ SUBMIT Y BLOQUEOS
+    // =========================================================================
 
     const onSubmit = async (data: any) => {
         if (diferencia !== 0 && totalFinal > 0) return alert(`Los pagos no cuadran. Falta abonar S/ ${diferencia.toFixed(2)}`)
-
         setLoading(true)
 
         try {
-            // ==========================================
-            // 🛡️ VALIDACIÓN TOTAL (ESCUDO FINAL) 🛡️
-            // ==========================================
-
-            if (alumnosConErroresDeGrado.length > 0) {
-                alert("❌ Tienes alumnos con Nivel o Grado incorrectos (marcados en rojo). Por favor corrige las opciones.");
-                setLoading(false);
-                return;
-            }
-
-            if (hasInvalidConfigs) {
-                alert("❌ Tienes alumnos con 'Configuración no encontrada' o con 'Tarifa S/ 0.00'. Por favor corrige el Nivel/Grado de esos estudiantes antes de continuar.");
-                setLoading(false);
-                return;
-            }
-
-            const dnisList = data.alumnos.map((a: any) => a.dni).filter(Boolean);
-            const dnisUnicos = new Set(dnisList);
-            if (dnisUnicos.size !== dnisList.length) {
-                alert("❌ Tienes DNIs duplicados entre los alumnos que estás intentando registrar ahora mismo. Por favor, revisa y corrige.");
-                setLoading(false);
-                return;
-            }
-
-            const resDni = await fetch('/api/estudiantes/verificar-dnis', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ dnis: Array.from(dnisUnicos) })
-            });
-            const dbDniData = await resDni.json();
-            if (dbDniData.registrados && dbDniData.registrados.length > 0) {
-                alert(`❌ Los siguientes DNIs YA ESTÁN REGISTRADOS en el sistema: ${dbDniData.registrados.join(', ')}. Quítalos del formulario para poder continuar.`);
-                setLoading(false);
-                return;
-            }
-
-            const opsList = data.pagos
-                .filter((p: any) => p.metodo !== "EFECTIVO" && p.numeroOperacion)
-                .map((p: any) => p.numeroOperacion.trim());
-            const opsUnicas = new Set(opsList);
-            if (opsUnicas.size !== opsList.length) {
-                alert("❌ Tienes Números de Operación repetidos en este formulario. Cada voucher debe tener un número único.");
-                setLoading(false);
-                return;
-            }
-
-            for (const op of Array.from(opsUnicas)) {
-                const resOp = await fetch(`/api/pagos/verificar?operacion=${op}`);
-                const dbOpData = await resOp.json();
-                if (dbOpData.existe) {
-                    alert(`❌ El Número de Operación '${op}' YA HA SIDO UTILIZADO en otra inscripción. No se puede reutilizar.`);
-                    setLoading(false);
-                    return;
-                }
-            }
-
-            // ==========================================
-            // SUBIR IMÁGENES Y PROCESAR
-            // ==========================================
+            // CHEQUEO FINAL TIPO ESCUDO (Doble seguridad)
+            if (alumnosConErroresDeGrado.length > 0) throw new Error("Tienes alumnos con Nivel o Grado incorrectos (marcados en rojo).");
+            if (hasInvalidConfigs) throw new Error("Hay alumnos con tarifas S/ 0.00. Verifica sus grados/niveles.");
+            if (dnisDuplicadosLocal.length > 0) throw new Error("Tienes DNIs repetidos en este mismo formulario (marcados en naranja).");
+            if (dnisDuplicadosDB.length > 0) throw new Error("Tienes alumnos que ya están registrados en la Base de Datos (marcados en rojo).");
+            if (opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0) throw new Error("Tienes Números de Operación repetidos.");
 
             const pagosProcesados = await Promise.all(data.pagos.map(async (pago: any, index: number) => {
                 let comprobanteUrl = null;
@@ -373,12 +336,19 @@ export default function FormInscripcion({
         }
     }
 
-    // El botón se bloquea si hay errores visuales evidentes O CONFIGURACIONES INVÁLIDAS O GRADOS INVÁLIDOS
-    const isBotonBloqueado = loading || alumnosWatch.length === 0 || hasInvalidConfigs || alumnosConErroresDeGrado.length > 0 || dnisDuplicadosDB.length > 0 || dnisDuplicadosLocal.length > 0 || opsDuplicadasLocal.length > 0 || opsDuplicadasDB.length > 0 || (totalFinal > 0 && diferencia !== 0);
+    // BLOQUEO TOTAL DEL BOTÓN
+    const isBotonBloqueado = loading
+        || alumnosWatch.length === 0
+        || hasInvalidConfigs
+        || alumnosConErroresDeGrado.length > 0
+        || dnisDuplicadosLocal.length > 0
+        || dnisDuplicadosDB.length > 0
+        || opsDuplicadasLocal.length > 0
+        || opsDuplicadasDB.length > 0
+        || (totalFinal > 0 && diferencia !== 0);
 
     return (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-
             <div className="bg-gradient-to-r from-blue-900 to-blue-800 p-6 rounded-2xl shadow-sm text-white border border-blue-700">
                 <h3 className="font-bold flex items-center mb-4 text-lg">
                     <Landmark className="w-5 h-5 mr-2" /> Cuentas Autorizadas para Recaudación
@@ -420,10 +390,11 @@ export default function FormInscripcion({
                         const nivelActual = (nivelFijo || alumnosWatch[index]?.nivel || "PRIMARIA") as keyof typeof OPCIONES_GRADOS;
                         const gradoActual = alumnosWatch[index]?.gradoOEdad || "";
                         const tipoColegioActual = userTipoColegio;
+                        const dniActual = alumnosWatch[index]?.dni?.trim() || "";
 
                         const hasGradoError = alumnosConErroresDeGrado.includes(index);
-                        const hasDniLocalError = dnisDuplicadosLocal.includes(index);
-                        const hasDniDbError = dnisDuplicadosDB.includes(index);
+                        const hasDniLocalError = dnisDuplicadosLocal.includes(dniActual);
+                        const hasDniDbError = dnisDuplicadosDB.includes(dniActual);
 
                         const configAlumno = precios.find(p => p.nivel === nivelActual && p.gradoOEdad === gradoActual);
 
@@ -432,13 +403,18 @@ export default function FormInscripcion({
                             if (tipoColegioActual === 'ESTATAL') costoAlumno = configAlumno.costoEstatalReg;
                             if (tipoColegioActual === 'PARTICULAR') costoAlumno = configAlumno.costoParticularReg;
                             if (tipoColegioActual === 'LIBRE') costoAlumno = configAlumno.costoLibreReg;
-
-                            // APLICAR DESCUENTO VISUAL (Asegurando que no baje de 0)
                             costoAlumno = Math.max(0, costoAlumno - (descuentoPorColegio || 0));
                         }
 
+                        // LÓGICA DE COLORES: Base de Datos (Rojo) manda sobre Local (Naranja)
+                        const divStyle = hasGradoError || hasDniDbError
+                            ? 'bg-red-50 border-red-300'
+                            : hasDniLocalError
+                                ? 'bg-orange-50 border-orange-300'
+                                : 'bg-gray-50 border-gray-200';
+
                         return (
-                            <div key={field.id} className={`p-5 rounded-xl border relative shadow-sm hover:shadow-md transition-shadow ${hasGradoError ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-200'}`}>
+                            <div key={field.id} className={`p-5 rounded-xl border relative shadow-sm hover:shadow-md transition-shadow ${divStyle}`}>
                                 {alumnosFields.length > 1 && (
                                     <button type="button" onClick={() => removeAlumno(index)} className="absolute -top-3 -right-3 bg-red-100 text-red-600 hover:bg-red-600 hover:text-white p-2 rounded-full transition-colors shadow-sm" title="Eliminar Alumno">
                                         <Trash2 className="w-4 h-4" />
@@ -451,41 +427,48 @@ export default function FormInscripcion({
                                         <input
                                             {...register(`alumnos.${index}.dni`)}
                                             maxLength={8}
-                                            onInput={(e) => { e.currentTarget.value = e.currentTarget.value.replace(/\D/g, '') }}
-                                            onBlur={(e) => verificarDniEnBaseDatos(e.target.value, index)}
+                                            onChange={(e) => {
+                                                register(`alumnos.${index}.dni`).onChange(e);
+                                                e.target.value = e.target.value.replace(/\D/g, '');
+                                            }}
+                                            onBlur={(e) => {
+                                                register(`alumnos.${index}.dni`).onBlur(e);
+                                                verificarDniEnBaseDatos(e.target.value);
+                                            }}
                                             placeholder="Solo números"
                                             required
-                                            className={`w-full p-2.5 border rounded-lg text-sm bg-white font-bold tracking-widest ${(hasDniLocalError || hasDniDbError) ? 'border-red-500 bg-red-50 focus:ring-red-500 text-red-700' : ''}`}
+                                            className={`w-full p-2.5 border rounded-lg text-sm bg-white font-bold tracking-widest transition-colors
+                                                ${hasDniDbError ? 'border-red-500 bg-red-100 focus:ring-red-500 text-red-700'
+                                                    : hasDniLocalError ? 'border-orange-500 bg-orange-100 focus:ring-orange-500 text-orange-700' : 'border-gray-300'}`}
                                         />
 
-                                        {hasDniDbError && !hasDniLocalError && (
+                                        {hasDniDbError && (
                                             <div className="absolute top-[-30px] left-0 bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce">
-                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI ya registrado
+                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI Registrado en DB
                                                 <div className="absolute -bottom-1 left-4 w-2 h-2 bg-red-600 rotate-45"></div>
                                             </div>
                                         )}
-                                        {hasDniLocalError && (
-                                            <div className="absolute top-[-30px] left-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce whitespace-nowrap">
-                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI repetido aquí
+                                        {hasDniLocalError && !hasDniDbError && (
+                                            <div className="absolute top-[-30px] left-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-pulse whitespace-nowrap">
+                                                <AlertCircle className="w-3 h-3 mr-1" /> DNI Repetido en Lista
                                                 <div className="absolute -bottom-1 left-4 w-2 h-2 bg-orange-500 rotate-45"></div>
                                             </div>
                                         )}
                                     </div>
                                     <div className="md:col-span-1 md:col-span-1.5">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nombres</label>
-                                        <input {...register(`alumnos.${index}.nombres`)} required className="w-full p-2.5 border rounded-lg text-sm bg-white uppercase" />
+                                        <input {...register(`alumnos.${index}.nombres`)} required className="w-full p-2.5 border rounded-lg text-sm bg-white uppercase border-gray-300" />
                                     </div>
                                     <div className="md:col-span-2 md:col-span-1.5">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Apellidos</label>
-                                        <input {...register(`alumnos.${index}.apellidos`)} required className="w-full p-2.5 border rounded-lg text-sm bg-white uppercase" />
+                                        <input {...register(`alumnos.${index}.apellidos`)} required className="w-full p-2.5 border rounded-lg text-sm bg-white uppercase border-gray-300" />
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                                    <div className="md:col-span-1">
+                                    <div className="md:col-span-1 relative">
                                         <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Nivel / Grado</label>
                                         <div className="flex space-x-2 relative">
-                                            {/* AUTO-CAMBIO DE GRADO AL SELECCIONAR NUEVO NIVEL */}
                                             <select
                                                 {...register(`alumnos.${index}.nivel`, {
                                                     onChange: (e) => {
@@ -493,7 +476,7 @@ export default function FormInscripcion({
                                                         setValue(`alumnos.${index}.gradoOEdad`, OPCIONES_GRADOS[nuevoNivel][0]);
                                                     }
                                                 })}
-                                                className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${hasGradoError ? "border-red-400 bg-red-100 text-red-700" : nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none" : "bg-white text-blue-700"}`}
+                                                className={`w-1/2 p-2.5 border rounded-lg text-sm font-bold ${hasGradoError ? "border-red-400 bg-red-100 text-red-700" : nivelFijo ? "bg-gray-200 text-gray-500 pointer-events-none border-gray-300" : "bg-white text-blue-700 border-gray-300"}`}
                                                 tabIndex={nivelFijo ? -1 : 0}
                                             >
                                                 {nivelFijo ? <option value={nivelFijo}>{nivelFijo}</option> : <><option value="INICIAL">INICIAL</option><option value="PRIMARIA">PRIMARIA</option><option value="SECUNDARIA">SECUNDARIA</option></>}
@@ -506,13 +489,13 @@ export default function FormInscripcion({
                                                     title="Escribe un grado válido o vuelve a elegir el nivel"
                                                 />
                                             ) : (
-                                                <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700" required>
+                                                <select {...register(`alumnos.${index}.gradoOEdad`)} className="w-1/2 p-2.5 border rounded-lg text-sm bg-white text-gray-700 border-gray-300" required>
                                                     {OPCIONES_GRADOS[nivelActual]?.map(grado => <option key={grado} value={grado}>{grado}</option>)}
                                                 </select>
                                             )}
 
                                             {hasGradoError && (
-                                                <div className="absolute top-11 left-0 text-[10px] text-red-600 font-black bg-white px-2 py-0.5 rounded shadow z-10 w-full">
+                                                <div className="absolute top-11 left-0 text-[10px] text-red-600 font-black bg-white px-2 py-0.5 rounded shadow z-10 w-full text-center">
                                                     Grado Inválido
                                                 </div>
                                             )}
@@ -525,7 +508,7 @@ export default function FormInscripcion({
                                             <select
                                                 {...register(`alumnos.${index}.tipoColegio`)}
                                                 value={userTipoColegio}
-                                                className="w-full p-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 font-bold pointer-events-none focus:outline-none"
+                                                className="w-full p-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 font-bold pointer-events-none focus:outline-none border-gray-300"
                                                 tabIndex={-1}
                                             >
                                                 <option value="ESTATAL">Estatal Nacional</option>
@@ -540,7 +523,7 @@ export default function FormInscripcion({
                                                 <input
                                                     {...register(`alumnos.${index}.institucion`)}
                                                     value={userInstitucion}
-                                                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 uppercase font-bold pointer-events-none"
+                                                    className="w-full pl-9 pr-3 py-2.5 border rounded-lg text-sm bg-gray-200 text-gray-500 uppercase font-bold pointer-events-none border-gray-300"
                                                     tabIndex={-1}
                                                     readOnly
                                                 />
@@ -578,8 +561,9 @@ export default function FormInscripcion({
                     </div>
 
                     {totalFinal > 0 && pagosFields.map((field, index) => {
-                        const hasOpLocalError = opsDuplicadasLocal.includes(index);
-                        const hasOpDbError = opsDuplicadasDB.includes(index);
+                        const opActual = pagosWatch[index]?.numeroOperacion?.trim() || "";
+                        const hasOpLocalError = opsDuplicadasLocal.includes(opActual);
+                        const hasOpDbError = opsDuplicadasDB.includes(opActual);
 
                         return (
                             <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-5 border border-gray-200 rounded-xl relative bg-white shadow-sm">
@@ -589,19 +573,19 @@ export default function FormInscripcion({
 
                                 <div className="md:col-span-3">
                                     <label className="text-xs font-bold text-gray-500">Método de Pago</label>
-                                    <select {...register(`pagos.${index}.metodo`)} className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-bold">
+                                    <select {...register(`pagos.${index}.metodo`)} className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-bold border-gray-300">
                                         <option value="YAPE">Yape</option><option value="PLIN">Plin</option><option value="TRANSFERENCIA">Transferencia / Depósito</option><option value="EFECTIVO">Efectivo (en Caja)</option>
                                     </select>
                                 </div>
 
                                 <div className="md:col-span-3">
                                     <label className="text-xs font-bold text-gray-500">Monto Abonado (S/)</label>
-                                    <input type="number" step="0.01" {...register(`pagos.${index}.monto`)} required placeholder="Ej: 300.00" className="w-full p-2.5 border rounded-lg bg-blue-50 mt-1 text-sm font-black text-blue-700 focus:ring-blue-500" />
+                                    <input type="number" step="0.01" {...register(`pagos.${index}.monto`)} required placeholder="Ej: 300.00" className="w-full p-2.5 border rounded-lg bg-blue-50 mt-1 text-sm font-black text-blue-700 focus:ring-blue-500 border-blue-200" />
                                 </div>
 
                                 <div className="md:col-span-6 relative">
                                     <label className="text-xs font-bold text-gray-500">Fecha y Hora (Perú)</label>
-                                    <input type="datetime-local" {...register(`pagos.${index}.fechaHoraPago`)} required className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-medium" />
+                                    <input type="datetime-local" {...register(`pagos.${index}.fechaHoraPago`)} required className="w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm font-medium border-gray-300" />
                                 </div>
 
                                 {pagosWatch[index]?.metodo !== "EFECTIVO" && (
@@ -610,21 +594,23 @@ export default function FormInscripcion({
                                             <label className="text-xs font-bold text-gray-500">Nro de Operación / Referencia</label>
                                             <input
                                                 {...register(`pagos.${index}.numeroOperacion`)}
-                                                onBlur={(e) => verificarOperacionEnBaseDatos(e.target.value, index)}
+                                                onBlur={(e) => verificarOperacionEnBaseDatos(e.target.value)}
                                                 required
                                                 placeholder="Ej: 054879"
-                                                className={`w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm ${(hasOpLocalError || hasOpDbError) ? 'border-red-500 focus:ring-red-500 text-red-600 font-bold' : ''}`}
+                                                className={`w-full p-2.5 border rounded-lg bg-gray-50 mt-1 text-sm transition-colors
+                                                ${hasOpDbError ? 'border-red-500 bg-red-100 focus:ring-red-500 text-red-600 font-bold'
+                                                        : hasOpLocalError ? 'border-orange-500 bg-orange-100 text-orange-600 font-bold' : 'border-gray-300'}`}
                                             />
 
-                                            {hasOpDbError && !hasOpLocalError && (
+                                            {hasOpDbError && (
                                                 <div className="absolute top-[10px] right-0 bg-red-600 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce">
-                                                    <AlertCircle className="w-3 h-3 mr-1" /> Operación ya registrada (DB)
+                                                    <AlertCircle className="w-3 h-3 mr-1" /> Operación en DB
                                                     <div className="absolute top-3 -right-1 w-2 h-2 bg-red-600 rotate-45"></div>
                                                 </div>
                                             )}
-                                            {hasOpLocalError && (
-                                                <div className="absolute top-[10px] right-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-bounce whitespace-nowrap">
-                                                    <AlertCircle className="w-3 h-3 mr-1" /> Operación duplicada aquí
+                                            {hasOpLocalError && !hasOpDbError && (
+                                                <div className="absolute top-[10px] right-0 bg-orange-500 text-white text-xs px-3 py-1.5 rounded-lg shadow-lg font-bold flex items-center z-10 animate-pulse whitespace-nowrap">
+                                                    <AlertCircle className="w-3 h-3 mr-1" /> Operación duplicada
                                                     <div className="absolute top-3 -right-1 w-2 h-2 bg-orange-500 rotate-45"></div>
                                                 </div>
                                             )}
@@ -648,14 +634,14 @@ export default function FormInscripcion({
                             </div>
                         )
                     })}
-                    {totalFinal === 0 && <p className="text-sm text-green-600 font-bold p-4 bg-green-50 rounded-lg flex items-center"><CheckCircle className="w-5 h-5 mr-2" /> El total está cubierto por el cupón o descuentos. No se requieren pagos adicionales.</p>}
+                    {totalFinal === 0 && <p className="text-sm text-green-600 font-bold p-4 bg-green-50 rounded-lg flex items-center"><CheckCircle className="w-5 h-5 mr-2" /> El total está cubierto por descuentos.</p>}
                 </div>
 
                 <div className="bg-blue-600 p-6 rounded-2xl shadow-lg text-white space-y-6">
                     <h3 className="font-bold flex items-center text-lg"><Calculator className="w-6 h-6 mr-2" /> Resumen de Cuenta</h3>
 
                     <div className="bg-blue-700/50 p-3 rounded-xl border border-blue-500/50">
-                        <label className="text-[10px] font-bold text-blue-200">CUPÓN DE DESCUENTO ESPECIAL</label>
+                        <label className="text-[10px] font-bold text-blue-200">CUPÓN DE DESCUENTO</label>
                         {!cuponAplicado ? (
                             <div className="flex gap-2 mt-1">
                                 <input type="text" value={codigoCuponInput} onChange={(e) => setCodigoCuponInput(e.target.value)} className="w-full p-2 bg-blue-800/50 rounded-lg text-sm text-white uppercase border border-blue-500" placeholder="CÓDIGO" />
@@ -675,15 +661,12 @@ export default function FormInscripcion({
                             <span>Estudiantes Inscriptos ({alumnosWatch.length - alumnosConErroresDeGrado.length}):</span>
                             <span>S/ {subTotalPagar.toFixed(2)}</span>
                         </div>
-
-                        {/* AVISO DEL DESCUENTO POR COLEGIO */}
                         {descuentoPorColegio > 0 && (
                             <div className="flex justify-between text-yellow-300 font-bold text-[10px] bg-yellow-900/30 px-2 py-1 rounded">
-                                <span>🎉 DESC. COLEGIO: S/ {descuentoPorColegio.toFixed(2)} x Alumno</span>
+                                <span>🎉 DESC. COLEGIO: S/ {descuentoPorColegio.toFixed(2)} c/u</span>
                                 <span>¡APLICADO!</span>
                             </div>
                         )}
-
                         {cuponAplicado && <div className="flex justify-between text-green-300 font-bold"><span>Descuento Cupón:</span><span>- S/ {cuponAplicado.monto.toFixed(2)}</span></div>}
                     </div>
 
@@ -707,6 +690,11 @@ export default function FormInscripcion({
                     >
                         {loading ? "Procesando Operación..." : "Finalizar Inscripción y Pagar"}
                     </button>
+                    {isBotonBloqueado && (
+                        <p className="text-xs text-center text-blue-200 font-bold">
+                            ⚠️ Hay errores en rojo/naranja o los pagos no cuadran.
+                        </p>
+                    )}
                 </div>
             </div>
         </form>
