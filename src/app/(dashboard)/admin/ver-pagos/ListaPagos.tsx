@@ -1,4 +1,3 @@
-//app/(dashboard)/admin/ver-pagos/ListaPagos.tsx
 "use client"
 import { useState, useMemo } from "react"
 // AÑADIDO: Importamos MessageCircle para usarlo como ícono de WhatsApp
@@ -165,7 +164,9 @@ export default function ListaPagos({
 
         const dataToExport: any[] = aprobados.map(p => {
             const listaEstudiantes = p.estudiantes?.map((e: any) => `${e.nombres} ${e.apellidos} (${e.dni || 'Sin DNI'})`).join(" | ") || "N/A";
-            const fechaHora = new Date(p.createdAt).toLocaleString();
+            
+            // 🛡️ SOLUCIÓN PARA EXCEL: Forzamos la zona horaria UTC para exportar la fecha exacta
+            const fechaHora = new Date(p.createdAt).toLocaleString('es-PE', { timeZone: 'UTC' });
 
             const esNuevo = p.detalles && p.detalles.length > 0;
             const metodosUsados = esNuevo ? p.detalles.map((d: any) => d.metodo).join(" + ") : p.metodo;
@@ -326,7 +327,8 @@ export default function ListaPagos({
                                             <span className="ml-2 text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">{p.cliente.role.replace("REPRESENTANTE_IE", "COLEGIO")}</span>
                                         </p>
                                         <p className="text-xs text-gray-500 flex items-center mt-0.5">
-                                            <Calendar className="w-3 h-3 mr-1" /> {new Date(p.createdAt).toLocaleDateString()}
+                                            {/* 🛡️ SOLUCIÓN PARA LA TABLA: Forzamos UTC */}
+                                            <Calendar className="w-3 h-3 mr-1" /> {new Date(p.createdAt).toLocaleDateString('es-PE', { timeZone: 'UTC' })}
                                         </p>
                                     </td>
 
@@ -443,7 +445,8 @@ export default function ListaPagos({
                                                 <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                                                 <p className="text-xs text-gray-500 flex justify-between mb-1">
                                                     <span className="font-bold">Pago #{i + 1}</span>
-                                                    <span>{new Date(detalle.fechaHoraPago).toLocaleString('es-PE', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                                                    {/* 🛡️ SOLUCIÓN PARA EL MODAL: Forzamos UTC aquí también */}
+                                                    <span>{new Date(detalle.fechaHoraPago).toLocaleString('es-PE', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })}</span>
                                                 </p>
                                                 <div className="flex justify-between items-end">
                                                     <div>
