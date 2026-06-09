@@ -1,4 +1,4 @@
-//app(dashboard)/admin/ticket/[id]/TicketClient.tsx
+// app/(dashboard)/admin/ticket/[id]/TicketClient.tsx
 "use client"
 import { useEffect, useState, useMemo } from "react"
 import Image from "next/image"
@@ -38,8 +38,9 @@ export default function TicketClient({ pago }: { pago: any }) {
     const numeroCorrelativo = pago.correlativo ? String(pago.correlativo).padStart(6, '0') : '000000'
     const nombreCajero = (pago.cajero?.name || 'SISTEMA').toUpperCase()
 
-    // Fecha de emisión del ticket (cuando se imprimió en caja)
+    // 🛡️ SOLUCIÓN: Forzamos la zona horaria de Perú para la fecha de creación del ticket
     const fechaEmision = new Date(pago.createdAt || new Date()).toLocaleString('es-PE', {
+        timeZone: 'America/Lima',
         dateStyle: 'short',
         timeStyle: 'short'
     })
@@ -47,8 +48,9 @@ export default function TicketClient({ pago }: { pago: any }) {
     // Variable para saber si usamos el modelo nuevo (múltiples pagos) o el antiguo
     const esPagoMultiple = pago.detalles && pago.detalles.length > 0;
 
-    // Fecha en la que se hizo el yape/transferencia (Modo Antiguo por retrocompatibilidad)
+    // 🛡️ SOLUCIÓN: Forzamos UTC para que muestre exactamente lo que guardaste en la DB sin restar 5 horas
     const fechaTransferenciaAntigua = pago.fechaHoraPago ? new Date(pago.fechaHoraPago).toLocaleString('es-PE', {
+        timeZone: 'UTC', 
         dateStyle: 'short',
         timeStyle: 'short'
     }) : null
@@ -128,8 +130,9 @@ export default function TicketClient({ pago }: { pago: any }) {
                             <div className="mb-2">
                                 <span className="font-bold text-[11px] uppercase block mb-1">Desglose de Pago(s):</span>
                                 {pago.detalles.map((d: any, idx: number) => {
-                                    // Calculamos la fecha para este detalle específico
+                                    // 🛡️ SOLUCIÓN: Forzamos UTC aquí también para cada detalle de pago múltiple
                                     const fechaDetalle = d.fechaHoraPago ? new Date(d.fechaHoraPago).toLocaleString('es-PE', {
+                                        timeZone: 'UTC',
                                         dateStyle: 'short',
                                         timeStyle: 'short'
                                     }) : "N/A";
