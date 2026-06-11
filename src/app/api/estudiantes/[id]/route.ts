@@ -12,8 +12,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const body = await req.json()
         const { dni, nombres, apellidos, nivel, gradoOEdad, institucion, localidad } = body
 
-        const { id } = await params // Await aquí
+        const { id } = await params
 
+        // Verificamos que el DNI no pertenezca a otro alumno
         if (dni) {
             const existeDni = await prisma.estudiante.findFirst({
                 where: { dni, id: { not: id } }
@@ -21,10 +22,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             if (existeDni) return NextResponse.json({ error: "El DNI ya está registrado en otro alumno" }, { status: 400 })
         }
 
+        // Aplicamos mayúsculas para guardar siempre uniforme en la base de datos
         const estudianteActualizado = await prisma.estudiante.update({
             where: { id },
             data: {
-                dni, nombres, apellidos, nivel, gradoOEdad, institucion, localidad,
+                dni, 
+                nombres: nombres?.toUpperCase(), 
+                apellidos: apellidos?.toUpperCase(), 
+                nivel, 
+                gradoOEdad, 
+                institucion: institucion?.toUpperCase(), 
+                localidad: localidad?.toUpperCase(),
                 estadoRegistro: (dni && nombres && apellidos) ? EstadoRegistro.COMPLETO : EstadoRegistro.INCOMPLETO
             }
         })
@@ -40,7 +48,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         const session = await getServerSession(authOptions)
         if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 })
 
-        const { id } = await params // Await aquí
+        const { id } = await params
 
         const tieneNotas = await prisma.resultadoExamen.findUnique({
             where: { estudianteId: id }

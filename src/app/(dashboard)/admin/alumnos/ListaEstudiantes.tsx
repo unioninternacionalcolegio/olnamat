@@ -1,4 +1,3 @@
-// app/(dashboard)/admin/alumnos/ListaEstudiantes.tsx
 "use client"
 
 import { useState, useMemo } from "react"
@@ -7,7 +6,13 @@ import {
     UserCheck, Printer, Users, Building2, UserCircle, FileDown, Calendar
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { format } from "date-fns" // Ya lo tienes en tu package.json
+import { format } from "date-fns"
+
+const OPCIONES_GRADOS = {
+    INICIAL: ["3 años", "4 años", "5 años"],
+    PRIMARIA: ["1er Grado", "2do Grado", "3er Grado", "4to Grado", "5to Grado", "6to Grado"],
+    SECUNDARIA: ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
+}
 
 export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales: any[], rolUsuario?: string }) {
     const router = useRouter()
@@ -96,6 +101,11 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
 
     const handleGuardarCambios = async (e: React.FormEvent) => {
         e.preventDefault()
+
+        if (editando.dni && editando.dni.length !== 8) {
+            return alert("El DNI debe tener exactamente 8 dígitos.")
+        }
+
         setLoading(true)
         try {
             const res = await fetch(`/api/estudiantes/${editando.id}`, {
@@ -148,7 +158,6 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
 
     // 5. Lógica de Selección Avanzada (Shift + Click)
     const handleSeleccionMultiple = (e: React.MouseEvent<HTMLInputElement>, id: string, index: number, listo: boolean) => {
-        // Detener la propagación para que no interfiera el onChange nativo
         e.stopPropagation()
         if (!listo) return
 
@@ -156,7 +165,6 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
         let nuevosSeleccionados = [...seleccionados]
 
         if (e.shiftKey && ultimoIndiceSeleccionado !== null) {
-            // Seleccionar un rango al estilo Windows
             const inicio = Math.min(ultimoIndiceSeleccionado, index)
             const fin = Math.max(ultimoIndiceSeleccionado, index)
 
@@ -173,7 +181,6 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                 }
             }
         } else {
-            // Selección normal
             if (checked) {
                 nuevosSeleccionados.push(id)
             } else {
@@ -344,9 +351,8 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                                 type="checkbox"
                                                 className="w-4 h-4 rounded text-blue-600 cursor-pointer disabled:opacity-50"
                                                 checked={seleccionados.includes(est.id)}
-                                                // Usamos onClick en lugar de onChange para capturar el evento ShiftKey
                                                 onClick={(e) => handleSeleccionMultiple(e, est.id, index, listo)}
-                                                onChange={() => { }} // React se queja si no hay onChange cuando usas checked
+                                                onChange={() => { }}
                                                 disabled={!listo}
                                                 title={!listo ? "Faltan datos o pago pendiente" : "Seleccionar (Usa Shift para varios)"}
                                             />
@@ -418,7 +424,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                                                     <Printer className="w-4 h-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => setEditando(est)}
+                                                    onClick={() => setEditando({ ...est, nivel: est.nivel || 'PRIMARIA', gradoOEdad: est.gradoOEdad || '1er Grado' })}
                                                     className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                     title="Editar"
                                                 >
@@ -441,7 +447,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                 </table>
             </div>
 
-            {/* MODAL DE EDICIÓN (Mantenido exactamente igual) */}
+            {/* MODAL DE EDICIÓN ACTUALIZADO */}
             {editando && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
                     <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl animate-in zoom-in duration-200">
@@ -452,42 +458,77 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                         <form onSubmit={handleGuardarCambios} className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
-                                    <label className="text-xs font-bold text-gray-500 uppercase">DNI</label>
+                                    <label className="text-xs font-bold text-gray-500 uppercase">DNI (8 dígitos)</label>
                                     <input
-                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none font-mono"
+                                        maxLength={8}
                                         value={editando.dni || ""}
-                                        onChange={e => setEditando({ ...editando, dni: e.target.value })}
+                                        onChange={e => setEditando({ ...editando, dni: e.target.value.replace(/\D/g, '') })}
                                         required
+                                        placeholder="Solo números"
                                     />
                                 </div>
-                                <div>
+                                <div className="col-span-2 sm:col-span-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Nombres</label>
                                     <input
-                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none uppercase"
                                         value={editando.nombres || ""}
-                                        onChange={e => setEditando({ ...editando, nombres: e.target.value })}
+                                        onChange={e => setEditando({ ...editando, nombres: e.target.value.toUpperCase() })}
                                         required
                                     />
                                 </div>
-                                <div>
+                                <div className="col-span-2 sm:col-span-1">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Apellidos</label>
                                     <input
-                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none uppercase"
                                         value={editando.apellidos || ""}
-                                        onChange={e => setEditando({ ...editando, apellidos: e.target.value })}
+                                        onChange={e => setEditando({ ...editando, apellidos: e.target.value.toUpperCase() })}
                                         required
                                     />
+                                </div>
+                                <div className="col-span-2 sm:col-span-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Nivel</label>
+                                    <select
+                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none font-bold text-blue-700 bg-blue-50"
+                                        value={editando.nivel}
+                                        onChange={(e) => {
+                                            const nuevoNivel = e.target.value as keyof typeof OPCIONES_GRADOS;
+                                            setEditando({
+                                                ...editando,
+                                                nivel: nuevoNivel,
+                                                gradoOEdad: OPCIONES_GRADOS[nuevoNivel][0] // Autoseleccionamos el primer grado del nuevo nivel
+                                            })
+                                        }}
+                                        required
+                                    >
+                                        <option value="INICIAL">INICIAL</option>
+                                        <option value="PRIMARIA">PRIMARIA</option>
+                                        <option value="SECUNDARIA">SECUNDARIA</option>
+                                    </select>
+                                </div>
+                                <div className="col-span-2 sm:col-span-1">
+                                    <label className="text-xs font-bold text-gray-500 uppercase">Grado / Edad</label>
+                                    <select
+                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none text-gray-700 bg-white"
+                                        value={editando.gradoOEdad}
+                                        onChange={e => setEditando({ ...editando, gradoOEdad: e.target.value })}
+                                        required
+                                    >
+                                        {OPCIONES_GRADOS[editando.nivel as keyof typeof OPCIONES_GRADOS]?.map((grado) => (
+                                            <option key={grado} value={grado}>{grado}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div className="col-span-2">
                                     <label className="text-xs font-bold text-gray-500 uppercase">Institución</label>
                                     <input
-                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none uppercase"
                                         value={editando.institucion || ""}
-                                        onChange={e => setEditando({ ...editando, institucion: e.target.value })}
+                                        onChange={e => setEditando({ ...editando, institucion: e.target.value.toUpperCase() })}
                                     />
                                 </div>
                             </div>
-                            <div className="flex justify-end space-x-3 pt-4 border-t">
+                            <div className="flex justify-end space-x-3 pt-4 border-t mt-4">
                                 <button
                                     type="button"
                                     onClick={() => setEditando(null)}

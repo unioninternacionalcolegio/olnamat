@@ -85,14 +85,26 @@ export default function VistaImpresionFichas({
 
                         {/* CABECERA Y QR */}
                         <div className="flex justify-between items-start border-b-4 border-black pb-2 mb-3">
-                            <div className="flex-1">
-                                <h1 className="text-2xl font-black uppercase tracking-tight mb-1 leading-none">
-                                    FICHA OPTICA OFICIAL
-                                </h1>
-                                <div className="text-sm font-bold uppercase bg-gray-200 inline-block px-4 py-0.5 border-2 border-black">
-                                    {configuracion.gradoOEdad} - {configuracion.nivel}
+                            
+                            {/* Parte izquierda: Título + Logo */}
+                            <div className="flex items-start gap-4 flex-1">
+                                {/* Logo a la derecha del título */}
+                                <img 
+                                    src="/logo.png"           // ← Cambia esta ruta por la de tu logo
+                                    alt="Logo" 
+                                    className="h-24 w-auto -mt-1"  // Ajusta el tamaño según necesites
+                                />
+                                <div>
+                                    <h1 className="text-2xl font-black uppercase tracking-tight mb-1 leading-none">
+                                        FICHA OPTICA OFICIAL
+                                    </h1>
+                                    <div className="text-sm font-bold uppercase bg-gray-200 inline-block px-4 py-0.5 border-2 border-black">
+                                        {configuracion.gradoOEdad} - {configuracion.nivel}
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Parte derecha: QR */}
                             <div className="flex flex-col items-center border-4 border-black p-3 ml-4 bg-white relative">
                                 <QRCode value={qrData} size={90} level="H" />
                                 <span className="text-[10px] font-mono mt-1.5 font-bold">C-{configuracion.id.slice(-5)}</span>
@@ -271,16 +283,17 @@ export default function VistaImpresionFichas({
                                                     {i + 1}.
                                                 </span>
 
-                                                <div className="flex gap-[9px]">
-                                                    {['A', 'B', 'C', 'D', 'E'].map(letra => (
-                                                        <div
-                                                            key={letra}
-                                                            className="w-6 h-6 rounded-full border-[1.7px] border-black flex items-center justify-center font-black text-[10px] bg-white"
-                                                        >
-                                                            {letra}
-                                                        </div>
-                                                    ))}
-                                                </div>
+                                                <div className="flex gap-[10px]">
+    {['A', 'B', 'C', 'D', 'E'].map(letra => (
+        <div
+            key={letra}
+            // REDUCIDO: De w-6 h-6 a w-5 h-5. Fuente más pequeña (text-[9px]).
+            className="w-5 h-5 rounded-full border-[1.5px] border-black flex items-center justify-center font-black text-[9px] bg-white text-gray-800"
+        >
+            {letra}
+        </div>
+    ))}
+</div>
                                             </div>
                                         ))}
                                     </div>
