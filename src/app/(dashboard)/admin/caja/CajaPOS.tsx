@@ -135,8 +135,13 @@ export default function CajaPOS({
 
     const [busquedaDelegado, setBusquedaDelegado] = useState("")
     const [mostrarOpcionesDelegado, setMostrarOpcionesDelegado] = useState(false)
+    
+    // PLUS AÑADIDO: Filtro que busca por nombre, dni O colegio
+    const busquedaLower = busquedaDelegado.toLowerCase()
     const delegadosFiltrados = delegados.filter(d =>
-        d.name?.toLowerCase().includes(busquedaDelegado.toLowerCase()) || d.dni?.includes(busquedaDelegado)
+        d.name?.toLowerCase().includes(busquedaLower) || 
+        d.dni?.includes(busquedaDelegado) ||
+        d.institucion?.toLowerCase().includes(busquedaLower)
     )
 
     const clienteActual = useMemo(() => clientesList.find(c => c.id === clienteSeleccionadoId), [clienteSeleccionadoId, clientesList])
@@ -531,7 +536,7 @@ export default function CajaPOS({
 
                 const estudianteData = {
                     dni: form.dni,
-                    nombres: form.nombres,
+                    nombres: form.nombres, // Aquí ya viajan en mayúsculas gracias al frontend
                     apellidos: form.apellidos,
                     nivel: form.nivel,
                     gradoOEdad: form.gradoOEdad
@@ -724,7 +729,8 @@ export default function CajaPOS({
 
                     <div className="flex bg-gray-100 p-1 rounded-2xl border border-gray-200">
                         <button onClick={() => { setModoInscripcion("DELEGADO"); setClienteSeleccionadoId(""); setMostrarRegistroRapido(false); setDescuentoActivoColegio(0); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${modoInscripcion === "DELEGADO" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500"}`}>MODO DELEGADO</button>
-                        <button onClick={() => { setModoInscripcion("LIBRE"); setClienteSeleccionadoId(""); setDescuentoActivoColegio(0); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${modoInscripcion === "LIBRE" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500"}`}> <UserCircle2 className="w-5 h-5" /> INDEPENDIENTE (LIBRE)</button>
+                        {/* PLUS AÑADIDO: Auto-setea el tipo de colegio a LIBRE al dar click */}
+                        <button onClick={() => { setModoInscripcion("LIBRE"); setClienteSeleccionadoId(""); setDescuentoActivoColegio(0); setTipoColegioActivo("LIBRE"); }} className={`flex-1 py-3 text-sm font-black rounded-xl transition-all flex items-center justify-center gap-2 ${modoInscripcion === "LIBRE" ? "bg-white text-purple-600 shadow-sm" : "text-gray-500"}`}> <UserCircle2 className="w-5 h-5" /> INDEPENDIENTE (LIBRE)</button>
                     </div>
 
                     {modoInscripcion === "DELEGADO" && (
@@ -732,7 +738,7 @@ export default function CajaPOS({
                             <label className="font-black text-gray-800 uppercase text-sm">Buscar Delegado</label>
                             <div className="relative">
                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                                <input type="text" placeholder="Escribe nombre o DNI..." className="w-full p-4 pl-12 border-2 border-gray-100 rounded-2xl font-bold bg-gray-50 focus:border-blue-500 focus:outline-none" value={busquedaDelegado}
+                                <input type="text" placeholder="Escribe nombre, DNI o colegio..." className="w-full p-4 pl-12 border-2 border-gray-100 rounded-2xl font-bold bg-gray-50 focus:border-blue-500 focus:outline-none" value={busquedaDelegado}
                                     onChange={e => { setBusquedaDelegado(e.target.value); setMostrarOpcionesDelegado(true); if (e.target.value === "") { setClienteSeleccionadoId(""); setDescuentoActivoColegio(0); } }}
                                     onFocus={() => setMostrarOpcionesDelegado(true)} onBlur={() => setTimeout(() => setMostrarOpcionesDelegado(false), 200)}
                                 />
@@ -746,7 +752,7 @@ export default function CajaPOS({
                                                 setBusquedaDelegado(`${d.name} (${d.dni})`);
                                                 setMostrarOpcionesDelegado(false);
                                                 setMostrarRegistroRapido(true);
-                                                verificarDescuentoColegio(d.institucion); // NUEVO: Dispara validación de colegio
+                                                verificarDescuentoColegio(d.institucion); 
                                             }}>
                                             <p className="font-bold text-sm text-gray-800">{d.name}</p>
                                             <p className="text-[10px] font-bold text-gray-500 flex items-center mt-1">
@@ -768,11 +774,12 @@ export default function CajaPOS({
                                 <input placeholder="CELULAR (Opcional)" value={datosGeneralesLibre.celular} onChange={e => setDatosGeneralesLibre({ ...datosGeneralesLibre, celular: e.target.value })} maxLength={9} type="tel" className="p-3 text-sm font-bold border rounded-xl bg-white" />
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-purple-600 bg-purple-100 px-2 py-1 rounded">COLEGIO</span>
+                                    {/* PLUS AÑADIDO: Formatear a mayúsculas directamente en el input */}
                                     <input
                                         placeholder="Escribe el colegio de procedencia..."
                                         value={datosGeneralesLibre.institucion}
-                                        onChange={e => setDatosGeneralesLibre({ ...datosGeneralesLibre, institucion: e.target.value })}
-                                        onBlur={() => verificarDescuentoColegio(datosGeneralesLibre.institucion)} // NUEVO: Check al salir del campo
+                                        onChange={e => setDatosGeneralesLibre({ ...datosGeneralesLibre, institucion: e.target.value.toUpperCase() })}
+                                        onBlur={() => verificarDescuentoColegio(datosGeneralesLibre.institucion)}
                                         list="colegios-list"
                                         className="w-full p-3 pl-24 text-sm font-bold border rounded-xl bg-white uppercase"
                                     />
@@ -809,7 +816,6 @@ export default function CajaPOS({
                             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                                 {formularios.map((form) => {
                                     const configPorNivel = safeConfiguraciones.filter(c => c.nivel === form.nivel)
-                                    // Determinar si hay opciones disponibles para el select de grado
                                     const opcionesValidas = configPorNivel.length > 0 ? configPorNivel.map(c => c.gradoOEdad) : GRADOS_VALIDOS[form.nivel] || []
 
                                     return (
@@ -836,11 +842,12 @@ export default function CajaPOS({
                                                     </p>
                                                 )}
                                             </div>
+                                            {/* PLUS AÑADIDO: Mayúsculas forzadas en inputs */}
                                             <div className="md:col-span-3">
-                                                <input placeholder="NOMBRES" value={form.nombres} onChange={e => actualizarFila(form.idLocal, 'nombres', e.target.value)} className="w-full p-2 text-xs font-bold border rounded-lg bg-gray-50 uppercase" />
+                                                <input placeholder="NOMBRES" value={form.nombres} onChange={e => actualizarFila(form.idLocal, 'nombres', e.target.value.toUpperCase())} className="w-full p-2 text-xs font-bold border rounded-lg bg-gray-50 uppercase" />
                                             </div>
                                             <div className="md:col-span-3">
-                                                <input placeholder="APELLIDOS" value={form.apellidos} onChange={e => actualizarFila(form.idLocal, 'apellidos', e.target.value)} className="w-full p-2 text-xs font-bold border rounded-lg bg-gray-50 uppercase" />
+                                                <input placeholder="APELLIDOS" value={form.apellidos} onChange={e => actualizarFila(form.idLocal, 'apellidos', e.target.value.toUpperCase())} className="w-full p-2 text-xs font-bold border rounded-lg bg-gray-50 uppercase" />
                                             </div>
                                             <div className="md:col-span-2 relative">
                                                 <select value={form.nivel} onChange={e => actualizarFila(form.idLocal, 'nivel', e.target.value)} className={`w-full p-2 text-[10px] font-bold border rounded-lg uppercase ${form.errorGrado ? 'bg-red-100 text-red-700 border-red-400' : 'bg-white'}`}>

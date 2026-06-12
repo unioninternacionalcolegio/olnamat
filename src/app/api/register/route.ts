@@ -40,17 +40,21 @@ export async function POST(req: Request) {
         }
 
         const hashedPassword = await bcrypt.hash(finalDni, 10)
-        const fullName = `${nombres} ${apellidos}`
+        // PLUS AÑADIDO: Nombres y Apellidos a Mayúsculas
+        const fullName = `${nombres.trim()} ${apellidos.trim()}`.toUpperCase()
+        
+        // PLUS AÑADIDO: Institución a Mayúsculas
+        const institucionMayus = institucion ? institucion.trim().toUpperCase() : null;
 
         const newUser = await prisma.user.create({
             data: {
                 dni: finalDni,
-                name: fullName.toUpperCase(),
+                name: fullName,
                 email: email || null,
                 password: hashedPassword,
                 celular: celular || null,
                 localidad: localidad || null,
-                institucion: institucion || null,
+                institucion: institucionMayus, // Se guarda en mayúscula
                 tipoColegio: (tipoColegio as TipoColegio) || TipoColegio.ESTATAL,
                 role: role as Role,
             }

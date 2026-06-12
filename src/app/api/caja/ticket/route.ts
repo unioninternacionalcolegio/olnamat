@@ -1,3 +1,4 @@
+//app/api/caja/ticket/route.ts
 import { NextResponse } from "next/server"
 import prisma from "@/lib/prisma"
 import { Nivel, MetodoPago, TipoComprobante, EstadoRegistro, TipoColegio } from "@prisma/client"
@@ -72,12 +73,14 @@ export async function POST(req: Request) {
                         estudiantesData.push({
                             nivel: item.nivel as Nivel,
                             gradoOEdad: item.gradoOEdad,
-                            institucion: cliente.institucion || "POR COMPLETAR", // Si es LIBRE, el padre/primer chico ya tiene el prefijo LIBRE-
-                            localidad: cliente.localidad || "POR COMPLETAR",
+                            // PLUS AÑADIDO: Institución a mayúsculas
+                            institucion: cliente.institucion?.toUpperCase() || "POR COMPLETAR", 
+                            localidad: cliente.localidad?.toUpperCase() || "POR COMPLETAR",
                             estadoRegistro: EstadoRegistro.COMPLETO,
                             dni: est.dni,
-                            nombres: est.nombres,
-                            apellidos: est.apellidos,
+                            // PLUS AÑADIDO: Nombres y Apellidos a mayúsculas
+                            nombres: est.nombres ? est.nombres.toUpperCase() : null,
+                            apellidos: est.apellidos ? est.apellidos.toUpperCase() : null,
                             creadorId: clienteId,
                             pagoId: nuevoPago.id,
                             tipoColegio: item.tipoColegioItem as TipoColegio
@@ -100,19 +103,23 @@ export async function POST(req: Request) {
 
                     if (esRegistroViejoConDatos) {
                         dniEstudiante = item.estudianteDni;
-                        nombresEstudiante = item.estudianteNombres;
-                        apellidosEstudiante = item.estudianteApellidos;
+                        // PLUS AÑADIDO: Nombres y Apellidos a mayúsculas (lógica vieja)
+                        nombresEstudiante = item.estudianteNombres ? item.estudianteNombres.toUpperCase() : null;
+                        apellidosEstudiante = item.estudianteApellidos ? item.estudianteApellidos.toUpperCase() : null;
                         estadoReg = EstadoRegistro.COMPLETO;
                     } else if (item.tipoColegioItem === 'LIBRE') {
                         // DNI autogenerado para cupos rápidos sin nombre
                         dniEstudiante = `LIB-${timestampSeed}-${item.nivel.substring(0, 3)}-${i}-${Math.floor(Math.random() * 1000)}`;
                     }
 
+                    // PLUS AÑADIDO: Institución a mayúsculas (lógica vieja)
+                    const instFinal = item.estudianteInstitucion || cliente.institucion;
+
                     estudiantesData.push({
                         nivel: item.nivel as Nivel,
                         gradoOEdad: item.gradoOEdad,
-                        institucion: item.estudianteInstitucion || cliente.institucion || "POR COMPLETAR",
-                        localidad: cliente.localidad || "POR COMPLETAR",
+                        institucion: instFinal ? instFinal.toUpperCase() : "POR COMPLETAR",
+                        localidad: cliente.localidad?.toUpperCase() || "POR COMPLETAR",
                         estadoRegistro: estadoReg,
                         dni: dniEstudiante,
                         nombres: nombresEstudiante,
