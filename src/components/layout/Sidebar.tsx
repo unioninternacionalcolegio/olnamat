@@ -52,7 +52,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
 
     const menuItems = [
         // --- RUTAS DE ADMINISTRACIÓN Y STAFF ---
-        { name: "Inicio Admin", href: "/admin", icon: Home, roles: ["ADMINISTRADOR", "ASISTENTE"] },
+        { name: "Inicio Admin", href: "/admin", icon: Home, roles: ["ADMINISTRADOR"] },
         { name: "Lista Alumnos", href: "/admin/alumnos", icon: Users, roles: ["ADMINISTRADOR", "ASISTENTE"] },
         {
             name: "Validar Pagos",
@@ -75,6 +75,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         { name: "Resultados Oficiales", href: "/admin/resultados", icon: Trophy, roles: ["ADMINISTRADOR", "REVISADOR"] },
         { name: "Configuración", href: "/admin/configuracion", icon: Settings, roles: ["ADMINISTRADOR"] },
         { name: "Fichas Oprticas", href: "/admin/pruebas", icon: Settings, roles: ["ADMINISTRADOR"] },
+        { name: "Delegados", href: "/admin/resumen-delegados", icon: Users, roles: ["ADMINISTRADOR"] },
 
         // --- RUTAS DE DELEGADOS Y REPRESENTANTES ---
         { name: "Mi Panel", href: "/delegado", icon: LayoutDashboard, roles: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"] },

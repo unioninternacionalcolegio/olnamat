@@ -618,7 +618,11 @@ export default function CajaPOS({
         nuevos[index] = { ...nuevos[index], [campo]: valor }
         setPagosParciales(nuevos)
     }
-
+    const eliminarPagoParcial = (index: number) => {
+        const nuevos = [...pagosParciales]
+        nuevos.splice(index, 1) // Elimina 1 elemento en la posición 'index'
+        setPagosParciales(nuevos)
+    }
     const procesarVenta = async () => {
         if (!clienteSeleccionadoId || carrito.length === 0) return alert("Venta vacía o sin cliente seleccionado.")
 
@@ -923,10 +927,11 @@ export default function CajaPOS({
 
                 {descuentoActivoColegio > 0 && (
                     <div className="bg-green-100 p-2 text-center text-xs font-black text-green-700 animate-pulse uppercase border-b border-green-200">
-                        ✨ Descuento especial de S/{descuentoActivoColegio.toFixed(2)} por inscrito aplicado ✨
+                       Descuento especial de S/{descuentoActivoColegio.toFixed(2)} por inscrito aplicado ✨
                     </div>
                 )}
 
+                {/* AQUÍ ESTÁ EL FLEX-1 QUE AHORA CRECERÁ MÁS GRACIAS AL H-[950px] DEL CONTENEDOR */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
                     {carrito.map(item => (
                         <div key={item.id} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-2xl border border-gray-100">
@@ -965,36 +970,42 @@ export default function CajaPOS({
                         <div className="flex justify-between items-center mb-2">
                             <span className="text-xs font-black uppercase text-gray-300">Métodos de Pago</span>
                             {saldoRestante !== 0 && (
-                                <span className={`text-[10px] font-black px-2 py-1 rounded ${saldoRestante > 0 ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>
+                                <span className={`text-[15px] font-black px-2 py-1 rounded ${saldoRestante > 0 ? 'bg-orange-500/20 text-orange-400' : 'bg-red-500/20 text-red-400'}`}>
                                     {saldoRestante > 0 ? `Falta S/ ${saldoRestante.toFixed(2)}` : `Exceso S/ ${Math.abs(saldoRestante).toFixed(2)}`}
                                 </span>
                             )}
                         </div>
                         {pagosParciales.map((pago, index) => (
                             <div key={index} className="space-y-2 border-b border-gray-600 pb-3 mb-3 last:border-0 last:pb-0 last:mb-0">
-                                <div className="flex gap-2">
-                                    <select value={pago.metodo} onChange={(e) => actualizarPagoParcial(index, 'metodo', e.target.value)} className="flex-1 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white">
+                                <div className="flex gap-2 items-center">
+                                    <select value={pago.metodo} onChange={(e) => actualizarPagoParcial(index, 'metodo', e.target.value)} className="flex-1 p-2 bg-gray-300 border border-gray-500 rounded-xl text-[11px] font-bold text-gray-900">
                                         <option value="EFECTIVO">💵 EFECTIVO</option>
                                         <option value="YAPE">📱 YAPE / PLIN</option>
                                         <option value="TRANSFERENCIA">🏦 TRANSFERENCIA</option>
                                     </select>
                                     <div className="relative w-28">
-                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">S/</span>
-                                        <input type="number" step="0.50" value={pago.monto === 0 ? "" : pago.monto} onChange={(e) => actualizarPagoParcial(index, 'monto', Number(e.target.value))} className="w-full pl-6 p-2 bg-gray-600 border border-gray-500 rounded-xl text-xs font-bold text-white" />
+                                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-600 text-xs font-bold">S/</span>
+                                        <input type="number" step="0.50" value={pago.monto === 0 ? "" : pago.monto} onChange={(e) => actualizarPagoParcial(index, 'monto', Number(e.target.value))} className="w-full pl-6 p-2 bg-gray-300 border border-gray-500 rounded-xl text-[13px] font-bold text-gray-900" />
                                     </div>
+                                    {/* BOTÓN ELIMINAR MÉTODO DE PAGO (SOLO A PARTIR DEL SEGUNDO) */}
+                                    {index > 0 && (
+                                        <button onClick={() => eliminarPagoParcial(index)} className="p-2 text-red-400 hover:text-red-500 hover:bg-red-400/10 rounded-lg transition-all" title="Eliminar método de pago">
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
+                                    )}
                                 </div>
                                 {pago.metodo !== "EFECTIVO" && (
                                     <div className="space-y-2 mt-2">
-                                        <input placeholder="N° Operación (Oblig)" value={pago.numeroOperacion} onChange={(e) => actualizarPagoParcial(index, 'numeroOperacion', e.target.value)} className="w-full p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white placeholder-gray-400" />
+                                        <input placeholder="N° Operación (Oblig)" value={pago.numeroOperacion} onChange={(e) => actualizarPagoParcial(index, 'numeroOperacion', e.target.value)} className="w-full p-2 bg-gray-300 border border-gray-500 rounded-xl text-[13px] font-bold text-gray-900 placeholder-gray-600" />
                                         <div className="flex gap-2">
-                                            <input type="date" value={pago.fecha} onChange={(e) => actualizarPagoParcial(index, 'fecha', e.target.value)} className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white" />
-                                            <input type="time" value={pago.hora} onChange={(e) => actualizarPagoParcial(index, 'hora', e.target.value)} className="w-1/2 p-2 bg-gray-600 border border-gray-500 rounded-xl text-[11px] font-bold text-white" />
+                                            <input type="date" value={pago.fecha} onChange={(e) => actualizarPagoParcial(index, 'fecha', e.target.value)} className="w-1/2 p-2 bg-gray-300 border border-gray-500 rounded-xl text-[13px] font-bold text-gray-900" />
+                                            <input type="time" value={pago.hora} onChange={(e) => actualizarPagoParcial(index, 'hora', e.target.value)} className="w-1/2 p-2 bg-gray-300 border border-gray-500 rounded-xl text-[13px] font-bold text-gray-900" />
                                         </div>
                                     </div>
                                 )}
                             </div>
                         ))}
-                        <button onClick={() => setPagosParciales([...pagosParciales, { metodo: "YAPE", monto: saldoRestante > 0 ? saldoRestante : 0, numeroOperacion: "", fecha: new Date().toISOString().split('T')[0], hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }])} className="w-full text-[10px] font-black uppercase text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 py-2 rounded-lg transition-colors flex items-center justify-center gap-1" disabled={saldoRestante <= 0}>
+                        <button onClick={() => setPagosParciales([...pagosParciales, { metodo: "YAPE", monto: saldoRestante > 0 ? saldoRestante : 0, numeroOperacion: "", fecha: new Date().toISOString().split('T')[0], hora: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) }])} className="w-full text-[12px] font-black uppercase text-blue-400 bg-blue-500/10 hover:bg-blue-100/20 py-2 rounded-lg transition-colors flex items-center justify-center gap-1" disabled={saldoRestante <= 0}>
                             <Plus className="w-3 h-3" /> Añadir otro método
                         </button>
                     </div>
