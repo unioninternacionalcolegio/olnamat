@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import {
     Edit2, Trash2, AlertCircle, CheckCircle, Search,
     UserCheck, Printer, Users, Building2, UserCircle, FileDown, Calendar
@@ -14,6 +14,8 @@ const OPCIONES_GRADOS = {
     SECUNDARIA: ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
 }
 
+const ELEMENTOS_POR_PAGINA = 100
+
 export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales: any[], rolUsuario?: string }) {
     const router = useRouter()
     const [estudiantes, setEstudiantes] = useState(iniciales)
@@ -25,6 +27,14 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
     // Estados para la selección
     const [seleccionados, setSeleccionados] = useState<string[]>([])
     const [ultimoIndiceSeleccionado, setUltimoIndiceSeleccionado] = useState<number | null>(null)
+
+    // Estado para la paginación
+    const [paginaActual, setPaginaActual] = useState(1)
+
+    // Resetear a la página 1 cuando se busca o se filtra
+    useEffect(() => {
+        setPaginaActual(1)
+    }, [busqueda, filtroTipo])
 
     // 1. Ordenamiento Inteligente (Pendientes primero, luego los más recientes)
     const estudiantesOrdenados = useMemo(() => {
@@ -70,6 +80,19 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
             return matchSearch && matchFiltro
         })
     }, [estudiantesOrdenados, busqueda, filtroTipo])
+
+    // Lógica de paginación
+    const totalPaginas = Math.ceil(filtrados.length / ELEMENTOS_POR_PAGINA)
+    const indiceInicio = (paginaActual - 1) * ELEMENTOS_POR_PAGINA
+    const elementosPaginados = filtrados.slice(indiceInicio, indiceInicio + ELEMENTOS_POR_PAGINA)
+
+    // Ajustar página si al eliminar nos quedamos en una página vacía
+    useEffect(() => {
+        if (paginaActual > totalPaginas && totalPaginas > 0) {
+            setPaginaActual(totalPaginas)
+        }
+    }, [totalPaginas, paginaActual])
+
 
     // 3. Métricas
     const metricas = useMemo(() => {
@@ -150,6 +173,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
     }
 
     const handleImprimirTodos = () => {
+        // Se imprimen todos los listos del filtro actual, sin importar la página
         const listos = filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO')
         if (listos.length === 0) return alert("No hay alumnos listos en la vista actual.")
         const ids = listos.map(e => e.id)
@@ -157,7 +181,7 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
     }
 
     // 5. Lógica de Selección Avanzada (Shift + Click)
-    const handleSeleccionMultiple = (e: React.MouseEvent<HTMLInputElement>, id: string, index: number, listo: boolean) => {
+    const handleSeleccionMultiple = (e: React.MouseEvent<HTMLInputElement>, id: string, indiceGlobal: number, listo: boolean) => {
         e.stopPropagation()
         if (!listo) return
 
@@ -165,8 +189,8 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
         let nuevosSeleccionados = [...seleccionados]
 
         if (e.shiftKey && ultimoIndiceSeleccionado !== null) {
-            const inicio = Math.min(ultimoIndiceSeleccionado, index)
-            const fin = Math.max(ultimoIndiceSeleccionado, index)
+            const inicio = Math.min(ultimoIndiceSeleccionado, indiceGlobal)
+            const fin = Math.max(ultimoIndiceSeleccionado, indiceGlobal)
 
             for (let i = inicio; i <= fin; i++) {
                 const est = filtrados[i]
@@ -189,10 +213,11 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
         }
 
         setSeleccionados(nuevosSeleccionados)
-        setUltimoIndiceSeleccionado(index)
+        setUltimoIndiceSeleccionado(indiceGlobal)
     }
 
     const toggleSeleccionarTodos = () => {
+        // Selecciona todos los visibles en el FILTRO (todas las páginas), es más útil para imprimir en masa
         const listosVisibles = filtrados
             .filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO')
             .map(e => e.id)
@@ -304,147 +329,179 @@ export default function ListaEstudiantes({ iniciales, rolUsuario }: { iniciales:
                 </div>
             </div>
 
-            {/* TABLA */}
-            <div className="bg-white rounded-xl shadow-sm border overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-max">
-                    <thead className="bg-gray-50 border-b">
-                        <tr>
-                            <th className="p-4 w-12 text-center">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4 rounded text-blue-600 cursor-pointer"
-                                    onChange={toggleSeleccionarTodos}
-                                    checked={
-                                        filtrados.length > 0 &&
-                                        filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO').length > 0 &&
-                                        filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO').every(e => seleccionados.includes(e.id))
-                                    }
-                                />
-                            </th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Estado / Impresión</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Fecha Inscripción</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">DNI / Código</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Alumno</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Delegado</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase">Grado / Nivel</th>
-                            <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                        {filtrados.length === 0 ? (
+            {/* TABLA Y PAGINACIÓN */}
+            <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-max">
+                        <thead className="bg-gray-50 border-b">
                             <tr>
-                                <td colSpan={8} className="p-8 text-center text-gray-500">
-                                    No se encontraron alumnos.
-                                </td>
+                                <th className="p-4 w-12 text-center">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 rounded text-blue-600 cursor-pointer"
+                                        onChange={toggleSeleccionarTodos}
+                                        checked={
+                                            filtrados.length > 0 &&
+                                            filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO').length > 0 &&
+                                            filtrados.filter(e => e.estadoRegistro === 'COMPLETO' && e.pago?.estado === 'APROBADO').every(e => seleccionados.includes(e.id))
+                                        }
+                                    />
+                                </th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase">Estado / Impresión</th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase">Fecha Inscripción</th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase">DNI / Código</th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase">Alumno</th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase">Delegado</th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase">Grado / Nivel</th>
+                                <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Acciones</th>
                             </tr>
-                        ) : (
-                            filtrados.map((est, index) => {
-                                const listo = est.estadoRegistro === 'COMPLETO' && est.pago?.estado === 'APROBADO';
-                                const yaImpreso = (est.impresiones || 0) > 0;
-                                const esDelegado = est.creador?.role === 'DELEGADO';
-                                const nombreDelegado = esDelegado && est.creador?.name ? est.creador.name : 'LIBRE';
+                        </thead>
+                        <tbody className="divide-y">
+                            {elementosPaginados.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="p-8 text-center text-gray-500">
+                                        No se encontraron alumnos.
+                                    </td>
+                                </tr>
+                            ) : (
+                                elementosPaginados.map((est, indexLocal) => {
+                                    // Calculamos el índice global para que el Shift+Click siga funcionando perfecto
+                                    const indiceGlobal = indiceInicio + indexLocal;
+                                    const listo = est.estadoRegistro === 'COMPLETO' && est.pago?.estado === 'APROBADO';
+                                    const yaImpreso = (est.impresiones || 0) > 0;
+                                    const esDelegado = est.creador?.role === 'DELEGADO';
+                                    const nombreDelegado = esDelegado && est.creador?.name ? est.creador.name : 'LIBRE';
 
-                                return (
-                                    <tr key={est.id} className={`hover:bg-gray-50 transition-colors ${!listo ? 'bg-orange-50/30' : ''}`}>
-                                        <td className="p-4 text-center">
-                                            <input
-                                                type="checkbox"
-                                                className="w-4 h-4 rounded text-blue-600 cursor-pointer disabled:opacity-50"
-                                                checked={seleccionados.includes(est.id)}
-                                                onClick={(e) => handleSeleccionMultiple(e, est.id, index, listo)}
-                                                onChange={() => { }}
-                                                disabled={!listo}
-                                                title={!listo ? "Faltan datos o pago pendiente" : "Seleccionar (Usa Shift para varios)"}
-                                            />
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex flex-col gap-1 items-start">
-                                                {listo ? (
-                                                    <span className="inline-flex items-center bg-green-100 text-green-700 px-2 py-1 rounded-md text-xs font-bold">
-                                                        <CheckCircle className="w-3 h-3 mr-1" /> Completo
+                                    return (
+                                        <tr key={est.id} className={`hover:bg-gray-50 transition-colors ${!listo ? 'bg-orange-50/30' : ''}`}>
+                                            <td className="p-4 text-center">
+                                                <input
+                                                    type="checkbox"
+                                                    className="w-4 h-4 rounded text-blue-600 cursor-pointer disabled:opacity-50"
+                                                    checked={seleccionados.includes(est.id)}
+                                                    onClick={(e) => handleSeleccionMultiple(e, est.id, indiceGlobal, listo)}
+                                                    onChange={() => { }}
+                                                    disabled={!listo}
+                                                    title={!listo ? "Faltan datos o pago pendiente" : "Seleccionar (Usa Shift para varios)"}
+                                                />
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex flex-col gap-1 items-start">
+                                                    {listo ? (
+                                                        <span className="inline-flex items-center bg-green-100 text-green-700 px-2 py-1 rounded-md text-xs font-bold">
+                                                            <CheckCircle className="w-3 h-3 mr-1" /> Completo
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
+                                                            <AlertCircle className="w-3 h-3 mr-1" /> Pendiente
+                                                        </span>
+                                                    )}
+                                                    {yaImpreso && (
+                                                        <span className="inline-flex items-center bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                                                            <Printer className="w-3 h-3 mr-1" /> Impreso ({est.impresiones})
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+
+                                            <td className="p-4">
+                                                <div className="flex items-center text-sm text-gray-600">
+                                                    <Calendar className="w-4 h-4 mr-2 text-gray-400" />
+                                                    <span>{est.createdAt ? format(new Date(est.createdAt), "dd/MM/yyyy HH:mm") : "Sin fecha"}</span>
+                                                </div>
+                                            </td>
+
+                                            <td className="p-4 font-mono text-sm text-gray-600">{est.dni || est.id.substring(0, 8)}</td>
+
+                                            <td className="p-4">
+                                                <p className="font-bold text-gray-800">{est.nombres || "SIN NOMBRE"} {est.apellidos}</p>
+                                                <p className="text-xs text-gray-500 flex items-center mt-1">
+                                                    <Building2 className="w-3 h-3 mr-1" />
+                                                    {est.institucion || "Sin colegio"}
+                                                    <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] uppercase font-semibold">
+                                                        {est.tipoColegio}
+                                                    </span>
+                                                </p>
+                                            </td>
+
+                                            <td className="p-4">
+                                                {esDelegado ? (
+                                                    <span className="inline-flex items-center bg-purple-50 text-purple-700 px-2 py-1.5 rounded-md text-xs font-bold shadow-sm border border-purple-100">
+                                                        <Users className="w-3 h-3 mr-1.5" />
+                                                        <span className="max-w-[120px] truncate" title={nombreDelegado}>{nombreDelegado}</span>
                                                     </span>
                                                 ) : (
-                                                    <span className="inline-flex items-center bg-orange-100 text-orange-700 px-2 py-1 rounded-md text-xs font-bold">
-                                                        <AlertCircle className="w-3 h-3 mr-1" /> Pendiente
+                                                    <span className="inline-flex items-center bg-gray-100 text-gray-600 px-2 py-1.5 rounded-md text-xs font-bold">
+                                                        <UserCircle className="w-3 h-3 mr-1.5" /> LIBRE
                                                     </span>
                                                 )}
-                                                {yaImpreso && (
-                                                    <span className="inline-flex items-center bg-blue-100 text-blue-700 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider">
-                                                        <Printer className="w-3 h-3 mr-1" /> Impreso ({est.impresiones})
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
+                                            </td>
 
-                                        <td className="p-4">
-                                            <div className="flex items-center text-sm text-gray-600">
-                                                <Calendar className="w-4 h-4 mr-2 text-gray-400" />
-                                                <span>{est.createdAt ? format(new Date(est.createdAt), "dd/MM/yyyy HH:mm") : "Sin fecha"}</span>
-                                            </div>
-                                        </td>
-
-                                        <td className="p-4 font-mono text-sm text-gray-600">{est.dni || est.id.substring(0, 8)}</td>
-
-                                        <td className="p-4">
-                                            <p className="font-bold text-gray-800">{est.nombres || "SIN NOMBRE"} {est.apellidos}</p>
-                                            <p className="text-xs text-gray-500 flex items-center mt-1">
-                                                <Building2 className="w-3 h-3 mr-1" />
-                                                {est.institucion || "Sin colegio"}
-                                                <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] uppercase font-semibold">
-                                                    {est.tipoColegio}
-                                                </span>
-                                            </p>
-                                        </td>
-
-                                        <td className="p-4">
-                                            {esDelegado ? (
-                                                <span className="inline-flex items-center bg-purple-50 text-purple-700 px-2 py-1.5 rounded-md text-xs font-bold shadow-sm border border-purple-100">
-                                                    <Users className="w-3 h-3 mr-1.5" />
-                                                    <span className="max-w-[120px] truncate" title={nombreDelegado}>{nombreDelegado}</span>
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center bg-gray-100 text-gray-600 px-2 py-1.5 rounded-md text-xs font-bold">
-                                                    <UserCircle className="w-3 h-3 mr-1.5" /> LIBRE
-                                                </span>
-                                            )}
-                                        </td>
-
-                                        <td className="p-4">
-                                            <p className="text-sm font-medium text-gray-700">{est.gradoOEdad}</p>
-                                            <p className="text-[10px] uppercase font-bold text-blue-500">{est.nivel}</p>
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="flex justify-center items-center space-x-2">
-                                                <button
-                                                    onClick={() => handleAccionImpresion('IMPRIMIR', [est.id])}
-                                                    disabled={!listo}
-                                                    className={`p-2 rounded-lg shadow-sm transition-colors ${listo ? "bg-blue-100 text-blue-600 hover:bg-blue-200" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-                                                    title={listo ? "Imprimir Carnet" : "No disponible"}
-                                                >
-                                                    <Printer className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => setEditando({ ...est, nivel: est.nivel || 'PRIMARIA', gradoOEdad: est.gradoOEdad || '1er Grado' })}
-                                                    className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleEliminar(est.id)}
-                                                    className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Eliminar"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )
-                            })
-                        )}
-                    </tbody>
-                </table>
+                                            <td className="p-4">
+                                                <p className="text-sm font-medium text-gray-700">{est.gradoOEdad}</p>
+                                                <p className="text-[10px] uppercase font-bold text-blue-500">{est.nivel}</p>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex justify-center items-center space-x-2">
+                                                    <button
+                                                        onClick={() => handleAccionImpresion('IMPRIMIR', [est.id])}
+                                                        disabled={!listo}
+                                                        className={`p-2 rounded-lg shadow-sm transition-colors ${listo ? "bg-blue-100 text-blue-600 hover:bg-blue-200" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                                                        title={listo ? "Imprimir Carnet" : "No disponible"}
+                                                    >
+                                                        <Printer className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEditando({ ...est, nivel: est.nivel || 'PRIMARIA', gradoOEdad: est.gradoOEdad || '1er Grado' })}
+                                                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Editar"
+                                                    >
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleEliminar(est.id)}
+                                                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+                
+                {/* CONTROLES DE PAGINACIÓN */}
+                {totalPaginas > 1 && (
+                    <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-gray-50 border-t gap-4">
+                        <span className="text-sm text-gray-600">
+                            Mostrando <span className="font-bold">{indiceInicio + 1}</span> a <span className="font-bold">{Math.min(indiceInicio + ELEMENTOS_POR_PAGINA, filtrados.length)}</span> de <span className="font-bold">{filtrados.length}</span> alumnos
+                        </span>
+                        <div className="flex space-x-2">
+                            <button
+                                onClick={() => setPaginaActual(p => Math.max(1, p - 1))}
+                                disabled={paginaActual === 1}
+                                className="px-4 py-2 border rounded-lg bg-white text-gray-700 font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Anterior
+                            </button>
+                            <span className="px-4 py-2 flex items-center text-sm font-medium text-gray-600">
+                                Pág. {paginaActual} de {totalPaginas}
+                            </span>
+                            <button
+                                onClick={() => setPaginaActual(p => Math.min(totalPaginas, p + 1))}
+                                disabled={paginaActual === totalPaginas}
+                                className="px-4 py-2 border rounded-lg bg-white text-gray-700 font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Siguiente
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* MODAL DE EDICIÓN ACTUALIZADO */}
