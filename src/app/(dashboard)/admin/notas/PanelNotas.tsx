@@ -1,3 +1,4 @@
+//app/(dashboard)/admin/notas/PanelNotas.tsx
 "use client"
 
 import { useState, useMemo, useRef, useEffect } from "react"
@@ -91,7 +92,10 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
     // Validaciones
     const totalRespuestas = (Number(correctas) || 0) + (Number(incorrectas) || 0)
     const errorCantidad = configActual && totalRespuestas > configActual.cantidadPreguntas
-    const errorHora = !hora || !minuto || !segundo || (hora === "0" && minuto === "0" && segundo === "0") || (hora === "00" && minuto === "00" && segundo === "00")
+    
+    // NUEVA VALIDACIÓN DE HORA (Es opcional, pero si escriben algo, deben completarlo)
+    const algunDatoHora = hora !== "" || minuto !== "" || segundo !== ""
+    const errorHora = algunDatoHora && (!hora || !minuto || !segundo)
 
     const seleccionarAlumno = (alumno: any) => {
         if (alumno.pago?.estado === "PENDIENTE") {
@@ -108,7 +112,6 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
 
             if (alumno.resultado.horaSalida) {
                 const d = new Date(alumno.resultado.horaSalida)
-                // Usamos getUTC para leer los números literales que mandamos desde la API
                 let h = d.getUTCHours()
                 const m = d.getUTCMinutes()
                 const s = d.getUTCSeconds()
@@ -145,21 +148,27 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
 
         if (errorCantidad) return alert("La cantidad de respuestas supera el límite de preguntas.")
         if (correctas === "" || incorrectas === "") return alert("Faltan correctas o incorrectas.")
-        if (errorHora) return alert("Debes ingresar una hora, minuto y segundo válidos. No puede ser 00:00:00.")
+        if (errorHora) return alert("Si decides ingresar la hora, debes colocar hora, minuto y segundo.")
 
         setLoading(true)
         try {
-            const fechaSalida = new Date()
-            let hFinal = parseInt(hora)
-            if (ampm === "PM" && hFinal < 12) hFinal += 12
-            if (ampm === "AM" && hFinal === 12) hFinal = 0
+            let isoStringAPI = null
+            let isoStringVisual = null
 
-            // Seteamos la hora para mandarla a la API
-            fechaSalida.setHours(hFinal, parseInt(minuto), parseInt(segundo), 0)
+            // Solo armamos la fecha si ingresaron la hora completa
+            if (hora && minuto && segundo) {
+                const fechaSalida = new Date()
+                let hFinal = parseInt(hora)
+                if (ampm === "PM" && hFinal < 12) hFinal += 12
+                if (ampm === "AM" && hFinal === 12) hFinal = 0
 
-            // Para la actualización visual local inmediata (le ponemos UTC para que coincida con lo que escupirá la DB)
-            const fechaVisualLocal = new Date()
-            fechaVisualLocal.setUTCHours(hFinal, parseInt(minuto), parseInt(segundo), 0)
+                fechaSalida.setHours(hFinal, parseInt(minuto), parseInt(segundo), 0)
+                isoStringAPI = fechaSalida.toISOString()
+
+                const fechaVisualLocal = new Date()
+                fechaVisualLocal.setUTCHours(hFinal, parseInt(minuto), parseInt(segundo), 0)
+                isoStringVisual = fechaVisualLocal.toISOString()
+            }
 
             const res = await fetch("/api/resultados", {
                 method: "POST",
@@ -170,7 +179,7 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                     incorrectas,
                     enBlanco,
                     puntajeTotal,
-                    horaSalida: fechaSalida.toISOString()
+                    horaSalida: isoStringAPI // Pasamos nulo si está vacío
                 })
             })
 
@@ -179,7 +188,7 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                 throw new Error(data.error)
             }
 
-            // ACTUALIZACIÓN EN VIVO (Mágico): Actualizamos el estado local para que la tabla se reordene al instante
+            // ACTUALIZACIÓN EN VIVO
             setLocalEstudiantes(prev => prev.map(est =>
                 est.id === estudianteActivo.id
                     ? {
@@ -189,7 +198,7 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                             incorrectas,
                             enBlanco,
                             puntajeTotal,
-                            horaSalida: fechaVisualLocal.toISOString(), // Usamos la fecha engañada para que getUTCHours la lea bien en vivo
+                            horaSalida: isoStringVisual, 
                             createdAt: new Date().toISOString()
                         }
                     }
@@ -199,7 +208,6 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
             console.log("¡Nota guardada/actualizada con éxito!")
             setEstudianteActivo(null)
 
-            // Llamamos a refresh en background para mantener sincronía con BD
             router.refresh()
 
             const searchInput = document.getElementById("buscador-alumnos")
@@ -212,17 +220,15 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
         }
     }
 
-    // LISTA DE CALIFICADOS RÁPIDA (Panel Derecho)
     const alumnosCalificados = localEstudiantes.filter(e => e.resultado != null).sort((a, b) => new Date(b.resultado.createdAt).getTime() - new Date(a.resultado.createdAt).getTime())
 
-    // LA MAGIA DE LA TABLA DINÁMICA: Filtrada y Ordenada
     const tablaDinamicaEstudiantes = useMemo(() => {
         if (!filtroNivel || !filtroGrado) return []
 
         const filtrados = localEstudiantes.filter(e =>
             e.nivel === filtroNivel &&
             e.gradoOEdad === filtroGrado &&
-            e.pago?.estado !== "PENDIENTE" // Solo los que ya pagaron
+            e.pago?.estado !== "PENDIENTE"
         )
 
         return filtrados.sort((a, b) => {
@@ -234,26 +240,27 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                 if (resB.puntajeTotal !== resA.puntajeTotal) {
                     return resB.puntajeTotal - resA.puntajeTotal
                 }
-                // 2. Empate: El menor tiempo gana (Ascendente)
-                // Extraemos el tiempo absoluto usando getTime()
-                const timeA = new Date(resA.horaSalida).getTime()
-                const timeB = new Date(resB.horaSalida).getTime()
-                return timeA - timeB
+                
+                // 2. Empate: El menor tiempo gana (Manejo de nulos)
+                if (resA.horaSalida && resB.horaSalida) {
+                    return new Date(resA.horaSalida).getTime() - new Date(resB.horaSalida).getTime()
+                }
+                if (resA.horaSalida && !resB.horaSalida) return -1 // A tiene tiempo, gana el empate
+                if (!resA.horaSalida && resB.horaSalida) return 1  // B tiene tiempo, gana el empate
+                
+                return a.apellidos.localeCompare(b.apellidos) // Ambos sin tiempo, alfabético
             }
-            // Los calificados siempre arriba de los no calificados
+            
             if (resA && !resB) return -1
             if (!resA && resB) return 1
 
-            // Ambos sin calificar: Orden alfabético
             return a.apellidos.localeCompare(b.apellidos)
         })
     }, [localEstudiantes, filtroNivel, filtroGrado])
 
-    // Función para formatear la hora en la tabla tal cual viene de DB
-    const formatearHora = (isoString: string) => {
+    const formatearHora = (isoString: string | null) => {
         if (!isoString) return "-"
         const d = new Date(isoString)
-        // Usamos getUTC para saltarnos el cambio de zona horaria del navegador
         let h = d.getUTCHours()
         const m = d.getUTCMinutes().toString().padStart(2, '0')
         const s = d.getUTCSeconds().toString().padStart(2, '0')
@@ -379,9 +386,9 @@ export default function PanelNotas({ estudiantes, configuraciones }: PanelNotasP
                             )}
 
                             <div className="flex flex-col md:flex-row items-center justify-between border-t pt-4 gap-4">
-                                {/* ENTRADA DE HORA RÁPIDA (HH:MM:SS AM/PM) */}
+                                {/* ENTRADA DE HORA RÁPIDA - AHORA OPCIONAL */}
                                 <div className="w-full md:w-auto">
-                                    <label className="block text-xs font-bold text-gray-500 mb-1 flex items-center"><Clock className="w-3 h-3 mr-1" /> Hora de Salida (Requerido)</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1 flex items-center"><Clock className="w-3 h-3 mr-1" /> Hora de Salida (Opcional)</label>
                                     <div className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200">
                                         <input
                                             type="number" placeholder="HH" min="1" max="12"
