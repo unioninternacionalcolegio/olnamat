@@ -37,6 +37,8 @@ export default function LoginPage() {
                 router.push("/admin")
             } else if (userRole === "ASISTENTE") {
                 router.push("/admin/alumnos") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+            } else if (userRole === "REVISADOR") {
+                router.push("/admin/notas") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
             } else if (userRole === "DELEGADO" || userRole === "REPRESENTANTE_IE") {
                 router.push("/delegado") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
             } else if (userRole === "LIBRE") {
