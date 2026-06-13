@@ -138,6 +138,22 @@ export default function PremiacionColegiosPage() {
         doc.setTextColor(150);
         doc.text(`Modalidad: ${modalidadTexto}`, doc.internal.pageSize.getWidth() / 2, 72, { align: "center" });
 
+        // =======================================================
+        // AQUI ESTÁN TUS LOGOS INTEGRADOS EXACTAMENTE COMO PEDISTE
+        // =======================================================
+        try {
+            const imgLeft = new Image();
+            imgLeft.src = '/logo.png';
+            doc.addImage(imgLeft, 'PNG', 40, 30, 100, 60);
+
+            const imgRight = new Image();
+            imgRight.src = '/colegios/union-internacional.png';
+            doc.addImage(imgRight, 'PNG', doc.internal.pageSize.getWidth() - 130, 30, 100, 60);
+        } catch (e) {
+            console.log("No se encontraron los logos, continuando sin ellos.");
+        }
+        // =======================================================
+
         // 2. Definir Columnas Dinámicas para PDF
         const pdfCols = ["PUESTO", "INSTITUCIÓN", ...columnasVisibles.map(c => `${c.grado}\n(${c.nivel.charAt(0)})`), "TOTAL"];
 
@@ -157,8 +173,7 @@ export default function PremiacionColegiosPage() {
             return filaArray;
         });
 
-        // ---> CORRECCIÓN: Armamos los estilos de columna dinámicamente <---
-        // Esto evita el error de "createdCell" y a TypeScript le encanta.
+        // Configuración de columnas
         const dynamicColumnStyles: Record<number, any> = {
             0: { halign: 'center', fontStyle: 'bold', cellWidth: 40 },
             1: { cellWidth: vistaActiva === "TODOS" ? 140 : 200 }
@@ -175,10 +190,10 @@ export default function PremiacionColegiosPage() {
         autoTable(doc, {
             head: [pdfCols],
             body: filas,
-            startY: 90,
+            startY: 100, // Lo bajé un poquito (de 90 a 100) para que no choque con las imágenes que miden 60 de alto
             styles: { fontSize: vistaActiva === "TODOS" ? 7 : 9, cellPadding: 3 },
             headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', halign: 'center', valign: 'middle' },
-            columnStyles: dynamicColumnStyles, // Le pasamos nuestro objeto de estilos limpio
+            columnStyles: dynamicColumnStyles,
             alternateRowStyles: { fillColor: [249, 250, 251] },
         });
 
