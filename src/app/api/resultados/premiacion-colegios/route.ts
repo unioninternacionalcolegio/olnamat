@@ -1,3 +1,4 @@
+// app/api/resultados/premiacion-colegios/route.ts
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
@@ -18,18 +19,26 @@ export async function GET() {
         // 2. Agrupar por nivel y gradoOEdad
         const porGrado: Record<string, typeof estudiantes> = {};
         for (const est of estudiantes) {
-            const key = `${est.nivel}-${est.gradoOEdad}`;
+            const key = `${est.nivel}|${est.gradoOEdad}`; // Usamos | como separador seguro
             if (!porGrado[key]) porGrado[key] = [];
             porGrado[key].push(est);
         }
 
-        const topEstudiantes = [];
+        // Mapas para el ACUMULADO GENERAL
+        const mapGeneralNetos = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
+        const mapGeneralLibres = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
+        const mapGeneralTotal = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
 
-        // 3. Ordenar cada grupo y extraer los 10 primeros puestos
+        // Array para guardar el detalle separado por grado
+        const detallePorGrado: any[] = [];
+
+        // 3. Procesar cada grupo (Nivel-Grado)
         for (const key in porGrado) {
+            const [nivel, grado] = key.split('|');
             const alumnos = porGrado[key];
+
+            // Ordenar por puntaje (Mayor a menor) y luego por tiempo
             alumnos.sort((a, b) => {
-                // Ordenar por puntaje (Mayor a menor)
                 const puntajeA = a.resultado!.puntajeTotal;
                 const puntajeB = b.resultado!.puntajeTotal;
 
@@ -45,62 +54,68 @@ export async function GET() {
             });
 
             // Tomamos solo los 10 primeros de este grado
-            topEstudiantes.push(...alumnos.slice(0, 10));
-        }
+            const top10 = alumnos.slice(0, 10);
 
-        // 4. Mapas para acumular puntajes según la categoría
-        const mapNetos = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
-        const mapLibres = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
-        const mapTotal = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
+            // Mapas específicos para ESTE grado
+            const mapGradoNetos = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
+            const mapGradoLibres = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
+            const mapGradoTotal = new Map<string, { colegio: string; puntaje: number; cantidad: number }>();
 
-        // 5. Iterar sobre los top estudiantes y agrupar sumatorias
-        for (const est of topEstudiantes) {
-            const instOriginal = est.institucion?.toUpperCase().trim() || "DESCONOCIDO";
-            // Detectamos si es de la categoría Libre
-            const isLibre = instOriginal.startsWith("LIBRE-") || instOriginal.startsWith("LIBRE ");
+            // 4. Acumular puntajes
+            for (const est of top10) {
+                const instOriginal = est.institucion?.toUpperCase().trim() || "DESCONOCIDO";
+                const isLibre = instOriginal.startsWith("LIBRE-") || instOriginal.startsWith("LIBRE ");
 
-            // Obtenemos el nombre base para el consolidado (Ej: "LIBRE-ZARATE" -> "ZARATE")
-            let instBase = instOriginal;
-            if (isLibre) {
-                instBase = instOriginal.replace("LIBRE-", "").replace("LIBRE ", "").trim();
+                let instBase = instOriginal;
+                if (isLibre) {
+                    instBase = instOriginal.replace("LIBRE-", "").replace("LIBRE ", "").trim();
+                }
+
+                const puntaje = est.resultado!.puntajeTotal;
+
+                // Función helper para sumar en un mapa
+                const sumarMapa = (mapa: Map<string, any>, clave: string, nombreCole: string) => {
+                    const actual = mapa.get(clave) || { colegio: nombreCole, puntaje: 0, cantidad: 0 };
+                    actual.puntaje += puntaje;
+                    actual.cantidad += 1;
+                    mapa.set(clave, actual);
+                };
+
+                // Sumar al ACUMULADO GENERAL
+                sumarMapa(mapGeneralTotal, instBase, instBase);
+                if (isLibre) sumarMapa(mapGeneralLibres, instOriginal, instOriginal);
+                else sumarMapa(mapGeneralNetos, instOriginal, instOriginal);
+
+                // Sumar al ESPECÍFICO DEL GRADO
+                sumarMapa(mapGradoTotal, instBase, instBase);
+                if (isLibre) sumarMapa(mapGradoLibres, instOriginal, instOriginal);
+                else sumarMapa(mapGradoNetos, instOriginal, instOriginal);
             }
 
-            const puntaje = est.resultado!.puntajeTotal;
-
-            // --- A. Sumar al TOTAL COMBINADO ---
-            const currTotal = mapTotal.get(instBase) || { colegio: instBase, puntaje: 0, cantidad: 0 };
-            currTotal.puntaje += puntaje;
-            currTotal.cantidad += 1;
-            mapTotal.set(instBase, currTotal);
-
-            // --- B. Sumar a NETOS o LIBRES según corresponda ---
-            if (isLibre) {
-                const currLibre = mapLibres.get(instOriginal) || { colegio: instOriginal, puntaje: 0, cantidad: 0 };
-                currLibre.puntaje += puntaje;
-                currLibre.cantidad += 1;
-                mapLibres.set(instOriginal, currLibre);
-            } else {
-                const currNeto = mapNetos.get(instOriginal) || { colegio: instOriginal, puntaje: 0, cantidad: 0 };
-                currNeto.puntaje += puntaje;
-                currNeto.cantidad += 1;
-                mapNetos.set(instOriginal, currNeto);
-            }
+            // Guardar el consolidado de este grado
+            const sortFn = (a: any, b: any) => b.puntaje - a.puntaje;
+            detallePorGrado.push({
+                id: key,
+                nivel,
+                grado,
+                netos: Array.from(mapGradoNetos.values()).sort(sortFn),
+                libres: Array.from(mapGradoLibres.values()).sort(sortFn),
+                total: Array.from(mapGradoTotal.values()).sort(sortFn),
+            });
         }
 
-        // 6. Función para ordenar de mayor a menor puntaje
+        // 5. Ordenar el General
         const sortFn = (a: any, b: any) => b.puntaje - a.puntaje;
-
-        // 7. Convertir mapas a arrays ordenados
-        const rankingNetos = Array.from(mapNetos.values()).sort(sortFn);
-        const rankingLibres = Array.from(mapLibres.values()).sort(sortFn);
-        const rankingTotal = Array.from(mapTotal.values()).sort(sortFn);
 
         return NextResponse.json({
             success: true,
             data: {
-                netos: rankingNetos,
-                libres: rankingLibres,
-                total: rankingTotal,
+                general: {
+                    netos: Array.from(mapGeneralNetos.values()).sort(sortFn),
+                    libres: Array.from(mapGeneralLibres.values()).sort(sortFn),
+                    total: Array.from(mapGeneralTotal.values()).sort(sortFn),
+                },
+                porGrado: detallePorGrado.sort((a, b) => a.id.localeCompare(b.id)) // Ordenar alfabéticamente por nivel/grado
             },
         });
     } catch (error) {
