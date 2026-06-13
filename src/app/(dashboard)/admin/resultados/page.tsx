@@ -56,7 +56,7 @@ export default function ResultadosAdminPage() {
                 setDataCruda(data.estudiantes)
                 setClavesPlantilla(data.clavesRespuestas)
 
-                // NUEVO: Limpiamos el "LIBRE-" para agrupar colegios únicos en los checkboxes
+                // Limpiamos el "LIBRE-" para agrupar colegios únicos en los checkboxes
                 const insts = Array.from(new Set(data.estudiantes.map((e: any) => {
                     return e.institucion.startsWith("LIBRE-")
                         ? e.institucion.substring(6).trim()
@@ -118,7 +118,7 @@ export default function ResultadosAdminPage() {
 
 
     // ========================================================
-    // GENERACIÓN DE PDF
+    // GENERACIÓN DE PDF (PULIDO Y LISTO PARA PUBLICAR)
     // ========================================================
     const descargarPDF = () => {
         if (rankingFiltrado.length === 0) return alert("No hay datos para exportar.");
@@ -128,39 +128,49 @@ export default function ResultadosAdminPage() {
         // 1. Títulos Centrales
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
-        doc.text("RANKING OFICIAL DE RESULTADOS", doc.internal.pageSize.getWidth() / 2, 50, { align: "center" });
+        doc.text("RESULTADOS OFICIALES", doc.internal.pageSize.getWidth() / 2, 50, { align: "center" });
 
         doc.setFontSize(12);
         doc.setTextColor(100);
         doc.text(`${nivel} - ${grado}`, doc.internal.pageSize.getWidth() / 2, 70, { align: "center" });
-        doc.text(`Participantes en lista: ${rankingFiltrado.length}`, doc.internal.pageSize.getWidth() / 2, 85, { align: "center" });
+        
 
         // 2. Insertar Logos (Requiere las imágenes en public/)
         try {
             const imgLeft = new Image();
-            imgLeft.src = '/logo-izquierdo.png';
-            doc.addImage(imgLeft, 'PNG', 40, 30, 60, 60);
+            imgLeft.src = '/logo.png';
+            doc.addImage(imgLeft, 'PNG', 40, 30, 100, 60);
 
             const imgRight = new Image();
-            imgRight.src = '/logo-derecho.png';
-            doc.addImage(imgRight, 'PNG', doc.internal.pageSize.getWidth() - 100, 30, 60, 60);
+            imgRight.src = '/colegios/union-internacional.png';
+            doc.addImage(imgRight, 'PNG', doc.internal.pageSize.getWidth() - 130, 30, 100, 60);
         } catch (e) {
             console.log("No se encontraron los logos, continuando sin ellos.");
         }
 
-        // 3. Tabla de Resultados (Excluyendo DNI y Tipo)
+        // 3. Tabla de Resultados
         const columnas = ["PUESTO", "ESTUDIANTE", "INSTITUCIÓN", "CORR.", "INCO.", "BLANCO", "HORA EXACTA", "PUNTAJE"];
 
         const filas = rankingFiltrado.map(est => {
-            // Limpiamos el nombre para el PDF
-            const nombreLimpio = est.institucion.startsWith("LIBRE-")
-                ? est.institucion.substring(6).trim().toUpperCase()
-                : est.institucion.trim().toUpperCase();
+            // ---> LIMPIEZA DE NOMBRES Y APELLIDOS (Adiós tabulaciones y saltos de línea invisibles) <---
+            const apellidosLimpio = est.apellidos ? est.apellidos.replace(/\s+/g, ' ').trim() : "";
+            const nombresLimpio = est.nombres ? est.nombres.replace(/\s+/g, ' ').trim() : "";
+            const nombreCompletoFormateado = `${apellidosLimpio}, ${nombresLimpio}`.toUpperCase();
+
+            // ---> LÓGICA PARA EL NOMBRE DEL COLEGIO (Agregando "LIBRE - " de forma bonita) <---
+            let institucionLimpia = est.institucion ? est.institucion.replace(/\s+/g, ' ').trim().toUpperCase() : "";
+            
+            if (institucionLimpia.startsWith("LIBRE-")) {
+                const soloNombreColegio = institucionLimpia.substring(6).trim();
+                institucionLimpia = `LIBRE - ${soloNombreColegio}`;
+            } else if (est.tipoColegio === 'LIBRE') {
+                institucionLimpia = `LIBRE - ${institucionLimpia}`;
+            }
 
             return [
                 `${est.puesto}°`,
-                `${est.apellidos}, ${est.nombres}`.toUpperCase(),
-                nombreLimpio,
+                nombreCompletoFormateado,
+                institucionLimpia,
                 est.resultado.correctas,
                 est.resultado.incorrectas,
                 est.resultado.enBlanco,
@@ -187,7 +197,7 @@ export default function ResultadosAdminPage() {
         });
 
         // 4. Guardar archivo
-        doc.save(`Ranking_${nivel}_${grado.replace(" ", "_")}.pdf`);
+        doc.save(`Ranking_${nivel}_${grado.replace(/\s+/g, "_")}.pdf`);
     };
 
     return (
@@ -284,7 +294,7 @@ export default function ResultadosAdminPage() {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {rankingFiltrado.map((est) => {
-                                    // NUEVO: Verificamos si empieza con "LIBRE-" para setear el badge y nombre
+                                    // Verificamos si empieza con "LIBRE-" para setear el badge y nombre
                                     const esLibreDirecto = est.institucion.startsWith("LIBRE-");
                                     const nombreInstitucionFinal = esLibreDirecto ? est.institucion.substring(6).trim() : est.institucion;
                                     const tipoColegioFinal = esLibreDirecto ? "LIBRE" : est.tipoColegio;
