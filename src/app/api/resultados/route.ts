@@ -22,12 +22,12 @@ export async function GET(req: Request) {
             where: { nivel: nivel as any, gradoOEdad: grado }
         })
 
-        // 2. Traemos a los estudiantes con su resultado (incluyendo respuestasDetalle)
+        // 2. Traemos a TODOS los estudiantes de ese nivel y grado (hayan rendido o no)
         let estudiantes = await prisma.estudiante.findMany({
             where: {
                 nivel: nivel as any,
-                gradoOEdad: grado,
-                resultado: { isNot: null }
+                gradoOEdad: grado
+                // ELIMINADO: resultado: { isNot: null } -> Para que liste también a los no presentados
             },
             include: { resultado: true }
         })

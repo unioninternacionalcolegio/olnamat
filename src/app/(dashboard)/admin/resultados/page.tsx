@@ -1,4 +1,4 @@
-//app/(dashboard)/admin/resultados/page.tsx
+// app/(dashboard)/admin/resultados/page.tsx
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
@@ -53,11 +53,25 @@ export default function ResultadosAdminPage() {
             const res = await fetch(`/api/resultados?nivel=${nivel}&grado=${grado}`)
             const data = await res.json()
             if (res.ok) {
-                setDataCruda(data.estudiantes)
+                // MAGIA: Inyectamos un resultado vacío para los que no rindieron
+                const estudiantesNormalizados = data.estudiantes.map((e: any) => ({
+                    ...e,
+                    resultado: e.resultado || {
+                        correctas: 0,
+                        incorrectas: 0,
+                        enBlanco: 0,
+                        puntajeTotal: 0,
+                        horaSalida: null,
+                        respuestasDetalle: null,
+                        esFalta: true // Flag para saber que no dio examen
+                    }
+                }))
+
+                setDataCruda(estudiantesNormalizados)
                 setClavesPlantilla(data.clavesRespuestas)
 
                 // Limpiamos el "LIBRE-" para agrupar colegios únicos en los checkboxes
-                const insts = Array.from(new Set(data.estudiantes.map((e: any) => {
+                const insts = Array.from(new Set(estudiantesNormalizados.map((e: any) => {
                     return e.institucion.startsWith("LIBRE-")
                         ? e.institucion.substring(6).trim()
                         : e.institucion.trim();
@@ -98,14 +112,26 @@ export default function ResultadosAdminPage() {
             return colegiosSeleccionados.includes(nombreBase);
         });
 
-        // 2. Ordenar por Puntaje (Descendente) y luego por Tiempo (Ascendente)
+        // 2. Ordenar priorizando la asistencia, luego Puntaje (Descendente) y Tiempo (Ascendente)
         const ordenados = filtrados.sort((a, b) => {
+            const faltaA = a.resultado.esFalta;
+            const faltaB = b.resultado.esFalta;
+
+            // 🛑 ULTRA MAGIA: Si uno faltó y el otro no, el que FALTÓ se va al final absoluto (después de los negativos)
+            if (faltaA && !faltaB) return 1;
+            if (!faltaA && faltaB) return -1;
+
+            // Si ambos asistieron (o ambos faltaron), comparamos por puntaje total de forma descendente
             if (b.resultado.puntajeTotal !== a.resultado.puntajeTotal) {
                 return b.resultado.puntajeTotal - a.resultado.puntajeTotal; // Mayor puntaje primero
             }
+
             // Desempate por hora (El que entregó antes gana)
             const tiempoA = a.resultado.horaSalida ? new Date(a.resultado.horaSalida).getTime() : Infinity;
             const tiempoB = b.resultado.horaSalida ? new Date(b.resultado.horaSalida).getTime() : Infinity;
+
+            if (tiempoA === Infinity && tiempoB === Infinity) return 0;
+
             return tiempoA - tiempoB;
         });
 
@@ -133,7 +159,7 @@ export default function ResultadosAdminPage() {
         doc.setFontSize(12);
         doc.setTextColor(100);
         doc.text(`${nivel} - ${grado}`, doc.internal.pageSize.getWidth() / 2, 70, { align: "center" });
-        
+
 
         // 2. Insertar Logos (Requiere las imágenes en public/)
         try {
@@ -159,7 +185,8 @@ export default function ResultadosAdminPage() {
 
             // ---> LÓGICA PARA EL NOMBRE DEL COLEGIO (Agregando "LIBRE - " de forma bonita) <---
             let institucionLimpia = est.institucion ? est.institucion.replace(/\s+/g, ' ').trim().toUpperCase() : "";
-            
+
+            // CORRECCIÓN: Estaba institucionLinter, ahora está correctamente institucionLimpia
             if (institucionLimpia.startsWith("LIBRE-")) {
                 const soloNombreColegio = institucionLimpia.substring(6).trim();
                 institucionLimpia = `LIBRE - ${soloNombreColegio}`;
@@ -174,7 +201,7 @@ export default function ResultadosAdminPage() {
                 est.resultado.correctas,
                 est.resultado.incorrectas,
                 est.resultado.enBlanco,
-                formatearHoraExactaDB(est.resultado.horaSalida),
+                est.resultado.esFalta ? "NO PRESENTADO" : formatearHoraExactaDB(est.resultado.horaSalida),
                 est.resultado.puntajeTotal.toString()
             ]
         });
@@ -321,10 +348,14 @@ export default function ResultadosAdminPage() {
                                             <td className="px-6 py-4 text-center font-bold text-red-600 bg-red-50/30">{est.resultado.incorrectas}</td>
                                             <td className="px-6 py-4 text-center font-bold text-gray-500">{est.resultado.enBlanco}</td>
                                             <td className="px-6 py-4 text-center">
-                                                <div className="flex items-center justify-center text-gray-600 text-xs font-bold tracking-wider">
-                                                    <Clock className="w-3 h-3 mr-1 text-gray-400" />
-                                                    {formatearHoraExactaDB(est.resultado.horaSalida)}
-                                                </div>
+                                                {est.resultado.esFalta ? (
+                                                    <span className="text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded uppercase">No Presentado</span>
+                                                ) : (
+                                                    <div className="flex items-center justify-center text-gray-600 text-xs font-bold tracking-wider">
+                                                        <Clock className="w-3 h-3 mr-1 text-gray-400" />
+                                                        {formatearHoraExactaDB(est.resultado.horaSalida)}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-center font-black text-xl text-blue-700 bg-blue-50/50">
                                                 {est.resultado.puntajeTotal}
@@ -372,7 +403,11 @@ export default function ResultadosAdminPage() {
                             {!alumnoSeleccionado.resultado.respuestasDetalle || !Array.isArray(alumnoSeleccionado.resultado.respuestasDetalle) ? (
                                 <div className="text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                                     <p className="text-gray-500 font-bold">No hay detalle de alternativas guardado.</p>
-                                    <p className="text-xs text-gray-400 mt-2">Este examen fue registrado solo con los totales manuales.</p>
+                                    <p className="text-xs text-gray-400 mt-2">
+                                        {alumnoSeleccionado.resultado.esFalta
+                                            ? "Este estudiante figura como NO PRESENTADO."
+                                            : "Este examen fue registrado solo con los totales manuales."}
+                                    </p>
                                 </div>
                             ) : (
                                 <div className="space-y-6">
