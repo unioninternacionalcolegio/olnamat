@@ -1,7 +1,9 @@
+// app/(dashboard)/delegado/inscribir/primaria/page.tsx
 import prisma from "@/lib/prisma"
 import { getServerSession } from "next-auth/next"
 import { authOptions } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import PrintButton from "@/components/PrintButton"
 
 export default async function ListaInicialPage() {
     const session = await getServerSession(authOptions)
@@ -42,18 +44,23 @@ export default async function ListaInicialPage() {
                 <div className="space-y-8">
                     {gradosUnicos.map((grado) => {
                         const alumnosEnGrado = estudiantes.filter(e => e.gradoOEdad === grado)
+                        const tableId = `tabla-primaria-${grado.replace(/\s+/g, '-')}`
+
                         return (
                             <div key={grado} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                                {/* Cabecera de la tabla (Grado y Total) */}
+                                {/* Cabecera de la tabla (Grado y Total + Botón) */}
                                 <div className="bg-blue-50 border-b border-blue-100 p-4 flex justify-between items-center">
                                     <h2 className="text-lg font-black text-blue-800">{grado}</h2>
-                                    <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-                                        Total: {alumnosEnGrado.length}
-                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        <PrintButton targetId={tableId} title={`Nivel Primaria - ${grado}`} />
+                                        <span className="bg-blue-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                                            Total: {alumnosEnGrado.length}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 {/* Tabla */}
-                                <div className="overflow-x-auto">
+                                <div id={tableId} className="overflow-x-auto">
                                     <table className="w-full text-left text-sm text-gray-600">
                                         <thead className="bg-gray-50 text-xs uppercase font-bold text-gray-500 border-b">
                                             <tr>

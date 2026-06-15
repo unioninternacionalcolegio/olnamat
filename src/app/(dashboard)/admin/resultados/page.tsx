@@ -12,11 +12,10 @@ const OPCIONES_GRADOS = {
     SECUNDARIA: ["1er Año", "2do Año", "3er Año", "4to Año", "5to Año"]
 }
 
-// NUEVO: Extrae la hora exacta y literal de la BD sin que el navegador la altere
+// Extrae la hora exacta y literal de la BD sin que el navegador la altere
 const formatearHoraExactaDB = (fechaIso: string | Date | null) => {
     if (!fechaIso) return "--:--:--";
     const d = new Date(fechaIso);
-    // Usamos métodos UTC para leer los números tal cual se guardaron en la DB
     const hh = d.getUTCHours().toString().padStart(2, '0');
     const mm = d.getUTCMinutes().toString().padStart(2, '0');
     const ss = d.getUTCSeconds().toString().padStart(2, '0');
@@ -27,16 +26,13 @@ export default function ResultadosAdminPage() {
     const [nivel, setNivel] = useState<keyof typeof OPCIONES_GRADOS>("PRIMARIA")
     const [grado, setGrado] = useState("1er Grado")
 
-    // Data cruda de la API
     const [dataCruda, setDataCruda] = useState<any[]>([])
     const [clavesPlantilla, setClavesPlantilla] = useState<any>({})
     const [loading, setLoading] = useState(false)
 
-    // Sistema de Filtros Inteligente
     const [colegiosUnicos, setColegiosUnicos] = useState<string[]>([])
     const [colegiosSeleccionados, setColegiosSeleccionados] = useState<string[]>([])
 
-    // Modal de Respuestas
     const [modalAbierto, setModalAbierto] = useState(false)
     const [alumnoSeleccionado, setAlumnoSeleccionado] = useState<any>(null)
 
@@ -53,7 +49,6 @@ export default function ResultadosAdminPage() {
             const res = await fetch(`/api/resultados?nivel=${nivel}&grado=${grado}`)
             const data = await res.json()
             if (res.ok) {
-                // MAGIA: Inyectamos un resultado vacío para los que no rindieron
                 const estudiantesNormalizados = data.estudiantes.map((e: any) => ({
                     ...e,
                     resultado: e.resultado || {
@@ -63,14 +58,13 @@ export default function ResultadosAdminPage() {
                         puntajeTotal: 0,
                         horaSalida: null,
                         respuestasDetalle: null,
-                        esFalta: true // Flag para saber que no dio examen
+                        esFalta: true 
                     }
                 }))
 
                 setDataCruda(estudiantesNormalizados)
                 setClavesPlantilla(data.clavesRespuestas)
 
-                // Limpiamos el "LIBRE-" para agrupar colegios únicos en los checkboxes
                 const insts = Array.from(new Set(estudiantesNormalizados.map((e: any) => {
                     return e.institucion.startsWith("LIBRE-")
                         ? e.institucion.substring(6).trim()
@@ -78,7 +72,7 @@ export default function ResultadosAdminPage() {
                 }))) as string[]
 
                 setColegiosUnicos(insts.sort())
-                setColegiosSeleccionados(insts) // Por defecto todos seleccionados
+                setColegiosSeleccionados(insts) 
             } else {
                 alert(data.error)
             }
@@ -100,11 +94,7 @@ export default function ResultadosAdminPage() {
     const seleccionarTodos = () => setColegiosSeleccionados(colegiosUnicos)
     const deseleccionarTodos = () => setColegiosSeleccionados([])
 
-    // ========================================================
-    // MAGIA: Recálculo en Vivo del Ranking según los Checks
-    // ========================================================
     const rankingFiltrado = useMemo(() => {
-        // 1. Filtrar los colegios que coincidan (limpiando "LIBRE-" si lo tienen)
         const filtrados = dataCruda.filter(est => {
             const nombreBase = est.institucion.startsWith("LIBRE-")
                 ? est.institucion.substring(6).trim()
@@ -112,21 +102,17 @@ export default function ResultadosAdminPage() {
             return colegiosSeleccionados.includes(nombreBase);
         });
 
-        // 2. Ordenar priorizando la asistencia, luego Puntaje (Descendente) y Tiempo (Ascendente)
         const ordenados = filtrados.sort((a, b) => {
             const faltaA = a.resultado.esFalta;
             const faltaB = b.resultado.esFalta;
 
-            // 🛑 ULTRA MAGIA: Si uno faltó y el otro no, el que FALTÓ se va al final absoluto (después de los negativos)
             if (faltaA && !faltaB) return 1;
             if (!faltaA && faltaB) return -1;
 
-            // Si ambos asistieron (o ambos faltaron), comparamos por puntaje total de forma descendente
             if (b.resultado.puntajeTotal !== a.resultado.puntajeTotal) {
-                return b.resultado.puntajeTotal - a.resultado.puntajeTotal; // Mayor puntaje primero
+                return b.resultado.puntajeTotal - a.resultado.puntajeTotal; 
             }
 
-            // Desempate por hora (El que entregó antes gana)
             const tiempoA = a.resultado.horaSalida ? new Date(a.resultado.horaSalida).getTime() : Infinity;
             const tiempoB = b.resultado.horaSalida ? new Date(b.resultado.horaSalida).getTime() : Infinity;
 
@@ -135,23 +121,17 @@ export default function ResultadosAdminPage() {
             return tiempoA - tiempoB;
         });
 
-        // 3. Asignar el nuevo puesto en vivo
         return ordenados.map((est, index) => ({
             ...est,
             puesto: index + 1
         }));
     }, [dataCruda, colegiosSeleccionados]);
 
-
-    // ========================================================
-    // GENERACIÓN DE PDF (PULIDO Y LISTO PARA PUBLICAR)
-    // ========================================================
     const descargarPDF = () => {
         if (rankingFiltrado.length === 0) return alert("No hay datos para exportar.");
 
         const doc = new jsPDF("p", "pt", "a4");
 
-        // 1. Títulos Centrales
         doc.setFont("helvetica", "bold");
         doc.setFontSize(16);
         doc.text("RESULTADOS OFICIALES", doc.internal.pageSize.getWidth() / 2, 50, { align: "center" });
@@ -160,8 +140,6 @@ export default function ResultadosAdminPage() {
         doc.setTextColor(100);
         doc.text(`${nivel} - ${grado}`, doc.internal.pageSize.getWidth() / 2, 70, { align: "center" });
 
-
-        // 2. Insertar Logos (Requiere las imágenes en public/)
         try {
             const imgLeft = new Image();
             imgLeft.src = '/logo.png';
@@ -174,19 +152,15 @@ export default function ResultadosAdminPage() {
             console.log("No se encontraron los logos, continuando sin ellos.");
         }
 
-        // 3. Tabla de Resultados
         const columnas = ["PUESTO", "ESTUDIANTE", "INSTITUCIÓN", "CORR.", "INCO.", "BLANCO", "HORA EXACTA", "PUNTAJE"];
 
         const filas = rankingFiltrado.map(est => {
-            // ---> LIMPIEZA DE NOMBRES Y APELLIDOS (Adiós tabulaciones y saltos de línea invisibles) <---
             const apellidosLimpio = est.apellidos ? est.apellidos.replace(/\s+/g, ' ').trim() : "";
             const nombresLimpio = est.nombres ? est.nombres.replace(/\s+/g, ' ').trim() : "";
             const nombreCompletoFormateado = `${apellidosLimpio}, ${nombresLimpio}`.toUpperCase();
 
-            // ---> LÓGICA PARA EL NOMBRE DEL COLEGIO (Agregando "LIBRE - " de forma bonita) <---
             let institucionLimpia = est.institucion ? est.institucion.replace(/\s+/g, ' ').trim().toUpperCase() : "";
 
-            // CORRECCIÓN: Estaba institucionLinter, ahora está correctamente institucionLimpia
             if (institucionLimpia.startsWith("LIBRE-")) {
                 const soloNombreColegio = institucionLimpia.substring(6).trim();
                 institucionLimpia = `LIBRE - ${soloNombreColegio}`;
@@ -214,16 +188,15 @@ export default function ResultadosAdminPage() {
             headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', halign: 'center' },
             columnStyles: {
                 0: { halign: 'center', fontStyle: 'bold' },
-                3: { halign: 'center', textColor: [22, 163, 74] }, // Verde
-                4: { halign: 'center', textColor: [220, 38, 38] }, // Rojo
-                5: { halign: 'center', textColor: [156, 163, 175] }, // Gris
+                3: { halign: 'center', textColor: [22, 163, 74] }, 
+                4: { halign: 'center', textColor: [220, 38, 38] }, 
+                5: { halign: 'center', textColor: [156, 163, 175] }, 
                 6: { halign: 'center' },
                 7: { halign: 'center', fontStyle: 'bold', fontSize: 10 }
             },
             alternateRowStyles: { fillColor: [249, 250, 251] },
         });
 
-        // 4. Guardar archivo
         doc.save(`Ranking_${nivel}_${grado.replace(/\s+/g, "_")}.pdf`);
     };
 
@@ -321,7 +294,6 @@ export default function ResultadosAdminPage() {
                             </thead>
                             <tbody className="divide-y divide-gray-100">
                                 {rankingFiltrado.map((est) => {
-                                    // Verificamos si empieza con "LIBRE-" para setear el badge y nombre
                                     const esLibreDirecto = est.institucion.startsWith("LIBRE-");
                                     const nombreInstitucionFinal = esLibreDirecto ? est.institucion.substring(6).trim() : est.institucion;
                                     const tipoColegioFinal = esLibreDirecto ? "LIBRE" : est.tipoColegio;
@@ -438,16 +410,38 @@ export default function ResultadosAdminPage() {
                                             </thead>
                                             <tbody className="divide-y divide-gray-100">
                                                 {alumnoSeleccionado.resultado.respuestasDetalle.map((item: any, idx: number) => {
-                                                    const correcta = clavesPlantilla[item.pregunta] || "-";
-                                                    const marco = item.marcada || "-";
-                                                    const esBlanco = marco === "-" || marco === "" || item.estado === "BLANCO";
-                                                    const esCorrecta = marco === correcta && !esBlanco;
+                                                    
+                                                    // 🛡️ CORRECCIÓN MÁGICA: Detección y lectura para Array Plano de Strings ["B", "D", "E", ...]
+                                                    let correcta = "-";
+                                                    if (clavesPlantilla) {
+                                                        if (Array.isArray(clavesPlantilla)) {
+                                                            if (typeof clavesPlantilla[0] === 'string') {
+                                                                // Si es el formato plano que acabas de enviar, la pregunta 1 está en el índice 0, la 2 en el 1, etc.
+                                                                const indexDePregunta = Number(item.pregunta) - 1;
+                                                                correcta = clavesPlantilla[indexDePregunta] || "-";
+                                                            } else {
+                                                                // Si fuese un array estructurado con objetos [{pregunta: 1, respuesta: "A"}]
+                                                                const c = clavesPlantilla.find((x: any) => String(x.pregunta) === String(item.pregunta));
+                                                                if (c) correcta = c.respuesta || c.clave || c.correcta || "-";
+                                                            }
+                                                        } else {
+                                                            // Si fuese un Map/Objeto tradicional {"1": "A", "2": "B"}
+                                                            correcta = clavesPlantilla[item.pregunta] || clavesPlantilla[String(item.pregunta)] || "-";
+                                                        }
+                                                    }
+
+                                                    // Sanitizamos los datos para evitar fallas por minúsculas o espacios accidentales
+                                                    const correctaLimpia = String(correcta).trim().toUpperCase();
+                                                    const marcoLimpio = String(item.marcada || item.respuesta || "-").trim().toUpperCase();
+
+                                                    const esBlanco = marcoLimpio === "-" || marcoLimpio === "" || item.estado === "BLANCO";
+                                                    const esCorrecta = (marcoLimpio === correctaLimpia) && !esBlanco;
 
                                                     return (
                                                         <tr key={idx} className="hover:bg-gray-50 transition-colors">
                                                             <td className="p-3 font-bold text-gray-700">N° {item.pregunta}</td>
-                                                            <td className="p-3 font-black text-blue-600">{correcta}</td>
-                                                            <td className="p-3 font-black text-gray-900">{marco}</td>
+                                                            <td className="p-3 font-black text-blue-600">{correctaLimpia}</td>
+                                                            <td className="p-3 font-black text-gray-900">{marcoLimpio}</td>
                                                             <td className="p-3">
                                                                 {esBlanco ? (
                                                                     <span className="flex items-center justify-center text-gray-500 text-xs font-bold bg-gray-100 px-2 py-1 rounded"><MinusCircle className="w-3 h-3 mr-1" /> BLANCO</span>
