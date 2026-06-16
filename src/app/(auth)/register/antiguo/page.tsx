@@ -115,7 +115,6 @@ export default function RegisterPage() {
                                 onChange={handleChange}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 text-gray-900 font-bold bg-blue-50"
                             >
-                                <option value="LIBRE">Participante Libre (Individual)</option>
                                 <option value="DELEGADO">Delegado (Inscribiré a varios alumnos)</option>
                             </select>
                         </div>

@@ -1,6 +1,6 @@
+// app/(dashboard)/admin/ver-pagos/ListaPagos.tsx
 "use client"
 import { useState, useMemo } from "react"
-// AÑADIDO: Importamos MessageCircle para usarlo como ícono de WhatsApp
 import { Check, X, Eye, ExternalLink, Calendar, Printer, Search, FileSpreadsheet, UserCheck, Wallet, Image as ImageIcon, CheckCircle, MessageCircle } from "lucide-react"
 import * as XLSX from "xlsx"
 
@@ -11,6 +11,7 @@ const getLocalToday = () => {
     const tzOffset = (new Date()).getTimezoneOffset() * 60000;
     return (new Date(Date.now() - tzOffset)).toISOString().split('T')[0];
 }
+
 const getLocalToday2 = () => {
     const fecha = new Date();
     fecha.setMonth(fecha.getMonth() - 1);   // ← un mes antes
@@ -22,6 +23,7 @@ const getLocalToday2 = () => {
 
     return `${year}-${month}-${day}`;
 };
+
 export default function ListaPagos({
     iniciales,
     currentUserId,
@@ -74,6 +76,9 @@ export default function ListaPagos({
         }
     }
 
+    // ==========================================
+    // 1. FILTRADO PRINCIPAL DE LA TABLA
+    // ==========================================
     const pagosFiltrados = useMemo(() => {
         return pagos.filter(p => {
             if (activeTab !== "TODOS" && p.cliente.role !== activeTab && !(activeTab === "COLEGIO" && p.cliente.role === "REPRESENTANTE_IE")) return false
@@ -115,19 +120,12 @@ export default function ListaPagos({
         })
     }, [pagos, activeTab, searchTerm, fechaInicio, fechaFin, soloMisCobros, currentUserId, metodoFiltro])
 
+    // ==========================================
+    // 2. TOTALES DINÁMICOS EN VIVO
+    // ==========================================
     const totales = useMemo(() => {
-        const filtradosParaTotales = pagos.filter(p => {
-            if (activeTab !== "TODOS" && p.cliente.role !== activeTab && !(activeTab === "COLEGIO" && p.cliente.role === "REPRESENTANTE_IE")) return false
-            if (soloMisCobros && p.cajeroId !== currentUserId && p.estado !== 'PENDIENTE') return false
-            if (fechaInicio || fechaFin) {
-                const fechaPagoStr = new Date(p.createdAt).toISOString().split('T')[0]
-                if (fechaInicio && fechaPagoStr < fechaInicio) return false
-                if (fechaFin && fechaPagoStr > fechaFin) return false
-            }
-            return true
-        })
-
-        const aprobados = filtradosParaTotales.filter(p => p.estado === 'APROBADO');
+        // 🔥 MAGIA: Ahora usa 'pagosFiltrados' directamente. Si buscas "Sadith", calcula SOLO los de Sadith.
+        const aprobados = pagosFiltrados.filter(p => p.estado === 'APROBADO');
 
         let yapePlin = 0, transferencia = 0, efectivo = 0;
         let recaudado = 0;
@@ -151,13 +149,16 @@ export default function ListaPagos({
         return {
             dineroRecaudado: recaudado,
             alumnosInscritos: aprobados.reduce((sum, p) => sum + p._count.estudiantes, 0),
-            pendientesCount: filtradosParaTotales.filter(p => p.estado === 'PENDIENTE').length,
+            pendientesCount: pagosFiltrados.filter(p => p.estado === 'PENDIENTE').length,
             yapePlin, transferencia, efectivo
         }
-    }, [pagos, activeTab, fechaInicio, fechaFin, soloMisCobros, currentUserId])
+    }, [pagosFiltrados])
 
     const toggleMetodoFiltro = (metodo: MetodoFiltro) => setMetodoFiltro(metodoFiltro === metodo ? null : metodo)
 
+    // ==========================================
+    // 3. EXPORTACIÓN A EXCEL INTELIGENTE
+    // ==========================================
     const handleExportarExcel = () => {
         const aprobados = pagosFiltrados.filter(p => p.estado === 'APROBADO');
         if (aprobados.length === 0) return alert("No hay cobros aprobados para exportar con los filtros actuales.");
@@ -165,41 +166,59 @@ export default function ListaPagos({
         const dataToExport: any[] = aprobados.map(p => {
             const listaEstudiantes = p.estudiantes?.map((e: any) => `${e.nombres} ${e.apellidos} (${e.dni || 'Sin DNI'})`).join(" | ") || "N/A";
             
-            // 🛡️ SOLUCIÓN PARA EXCEL: Forzamos la zona horaria UTC para exportar la fecha exacta
             const fechaHora = new Date(p.createdAt).toLocaleString('es-PE', { timeZone: 'UTC' });
 
             const esNuevo = p.detalles && p.detalles.length > 0;
-            const metodosUsados = esNuevo ? p.detalles.map((d: any) => d.metodo).join(" + ") : p.metodo;
             const operaciones = esNuevo
                 ? p.detalles.map((d: any) => d.numeroOperacion).filter(Boolean).join(" | ")
                 : (p.numeroOperacion || "N/A");
 
+            // 🔥 SEPARACIÓN DE MONTOS POR FILA
+            let subYape = 0;
+            let subTransf = 0;
+            let subEfectivo = 0;
+
+            if (esNuevo) {
+                p.detalles.forEach((d: any) => {
+                    if (d.metodo === 'YAPE' || d.metodo === 'PLIN') subYape += d.monto;
+                    if (d.metodo === 'TRANSFERENCIA') subTransf += d.monto;
+                    if (d.metodo === 'EFECTIVO') subEfectivo += d.monto;
+                });
+            } else {
+                if (p.metodo === 'YAPE' || p.metodo === 'PLIN') subYape += p.montoTotal;
+                if (p.metodo === 'TRANSFERENCIA') subTransf += p.montoTotal;
+                if (p.metodo === 'EFECTIVO') subEfectivo += p.montoTotal;
+            }
+
+            // Exportamos los montos como NÚMEROS (Number) para que en Excel se puedan sumar
             return {
                 "Comprobante": p.correlativo ? `${p.serie}-${String(p.correlativo).padStart(6, '0')}` : "N/A",
                 "Fecha y Hora": fechaHora,
                 "Cliente (Quien Pagó)": p.cliente.name || "Sin nombre",
-                "Celular": p.cliente.celular || "N/A", // Añadido celular al Excel
+                "Celular": p.cliente.celular || "N/A",
                 "Estudiantes Inscritos": listaEstudiantes,
-                "Métodos de Pago": metodosUsados,
                 "Nro Operaciones": operaciones,
-                "Descuento": p.descuento > 0 ? `S/ ${p.descuento}` : "S/ 0",
-                "Total Pagado": `S/ ${p.montoTotal}`,
+                "Descuento": Number(p.descuento.toFixed(2)),
+                "SubTotal YAPE / PLIN": Number(subYape.toFixed(2)),
+                "SubTotal TRANSFERENCIA": Number(subTransf.toFixed(2)),
+                "SubTotal EFECTIVO": Number(subEfectivo.toFixed(2)),
+                "Total Pagado Final": Number(p.montoTotal.toFixed(2)),
                 "Cajero / Aprobador": p.cajero?.name || "N/A"
             }
         });
 
-        // AÑADIDO: Filas de resumen al final del Excel
+        // AÑADIDO: Filas de resumen al final del Excel (con el filtro activo)
         dataToExport.push({}); // Fila vacía para separar
-        dataToExport.push({ "Comprobante": "======= RESUMEN DEL DÍA =======" });
-        dataToExport.push({ "Comprobante": "TOTAL YAPE / PLIN:", "Total Pagado": `S/ ${totales.yapePlin.toFixed(2)}` });
-        dataToExport.push({ "Comprobante": "TOTAL TRANSFERENCIA:", "Total Pagado": `S/ ${totales.transferencia.toFixed(2)}` });
-        dataToExport.push({ "Comprobante": "TOTAL EFECTIVO:", "Total Pagado": `S/ ${totales.efectivo.toFixed(2)}` });
-        dataToExport.push({ "Comprobante": "TOTAL GENERAL RECAUDADO:", "Total Pagado": `S/ ${totales.dineroRecaudado.toFixed(2)}` });
+        dataToExport.push({ "Comprobante": "======= RESUMEN DEL FILTRO ACTUAL =======" });
+        dataToExport.push({ "Comprobante": "TOTAL YAPE / PLIN:", "Total Pagado Final": Number(totales.yapePlin.toFixed(2)) });
+        dataToExport.push({ "Comprobante": "TOTAL TRANSFERENCIA:", "Total Pagado Final": Number(totales.transferencia.toFixed(2)) });
+        dataToExport.push({ "Comprobante": "TOTAL EFECTIVO:", "Total Pagado Final": Number(totales.efectivo.toFixed(2)) });
+        dataToExport.push({ "Comprobante": "TOTAL GENERAL RECAUDADO:", "Total Pagado Final": Number(totales.dineroRecaudado.toFixed(2)) });
 
         const worksheet = XLSX.utils.json_to_sheet(dataToExport);
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte_Caja");
-        XLSX.writeFile(workbook, `Reporte_Caja_${fechaInicio}_al_${fechaFin}.xlsx`);
+        XLSX.writeFile(workbook, `Reporte_Caja_Filtrado.xlsx`);
     }
 
     return (
@@ -212,12 +231,12 @@ export default function ListaPagos({
                 </div>
 
                 <div className="bg-green-50 border border-green-200 p-4 rounded-xl shadow-sm">
-                    <p className="text-green-800 text-xs font-bold uppercase mb-1">Total Recaudado</p>
+                    <p className="text-green-800 text-xs font-bold uppercase mb-1">Total Recaudado (Filtro)</p>
                     <p className="text-2xl font-black text-green-600">S/ {totales.dineroRecaudado.toFixed(2)}</p>
                 </div>
 
                 <div className="bg-blue-50 border border-blue-200 p-4 rounded-xl shadow-sm md:col-span-2">
-                    <p className="text-blue-800 text-xs font-bold uppercase mb-3">Desglose por Método (click para filtrar)</p>
+                    <p className="text-blue-800 text-xs font-bold uppercase mb-3">Desglose por Método (Filtro en Vivo)</p>
                     <div className="grid grid-cols-3 gap-3 text-center">
                         <button onClick={() => toggleMetodoFiltro("YAPE_PLIN")} className={`bg-white rounded-xl border p-3 transition-all hover:shadow-md ${metodoFiltro === "YAPE_PLIN" ? 'border-purple-500 ring-2 ring-purple-200' : 'border-blue-100'}`}>
                             <p className="text-[10px] text-gray-500 uppercase font-bold">YAPE / PLIN</p>
@@ -254,7 +273,7 @@ export default function ListaPagos({
                             </label>
                         )}
                         <button onClick={handleExportarExcel} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold flex items-center shadow-md transition-colors">
-                            <FileSpreadsheet className="w-5 h-5 mr-2" /> Reporte Excel
+                            <FileSpreadsheet className="w-5 h-5 mr-2" /> Reporte Excel (Filtrado)
                         </button>
                     </div>
                 </div>
@@ -262,7 +281,7 @@ export default function ListaPagos({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="relative">
                         <Search className="w-5 h-5 absolute left-3 top-2.5 text-gray-400" />
-                        <input type="text" placeholder="Buscar por Nombre, DNI, Ticket, Operación..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50 text-sm" />
+                        <input type="text" placeholder="Buscar por Cajero, Nombre, Ticket..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50 text-sm focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div className="flex items-center space-x-2">
                         <span className="text-xs font-bold text-gray-500 uppercase w-12">Desde</span>
@@ -282,7 +301,6 @@ export default function ListaPagos({
                         <tr>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Comprobante / Estado</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Cliente / Delegado</th>
-                            {/* AÑADIDO: Nueva columna de Contacto */}
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Contacto</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase">Aprobado Por</th>
                             <th className="p-4 text-xs font-bold text-gray-500 uppercase text-center">Cupos</th>
@@ -297,11 +315,9 @@ export default function ListaPagos({
                             const isMultiple = p.detalles && p.detalles.length > 1;
                             const firstMetodo = p.detalles?.length > 0 ? p.detalles[0].metodo : (p.metodo || "N/A");
 
-                            // AÑADIDO: Lógica para generar el link de WhatsApp si tiene celular
                             let waLink = null;
                             if (p.cliente.celular) {
                                 const soloNumeros = p.cliente.celular.replace(/\D/g, '');
-                                // Si tiene 9 dígitos exactos, asumimos que es número de Perú y le agregamos 51
                                 const celularConCodigo = soloNumeros.length === 9 ? `51${soloNumeros}` : soloNumeros;
                                 const mensajeWa = encodeURIComponent(`Hola ${p.cliente.name}, te escribimos de la Olimpiada Nacional de Matemática (OLNAMAT) para informarte que se aprobo tu pago y te enviamos tu carnet para que puedas imprimirlo muchos existos te esperamos este 13 de Junio`);
                                 waLink = `https://wa.me/${celularConCodigo}?text=${mensajeWa}`;
@@ -327,12 +343,10 @@ export default function ListaPagos({
                                             <span className="ml-2 text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">{p.cliente.role.replace("REPRESENTANTE_IE", "COLEGIO")}</span>
                                         </p>
                                         <p className="text-xs text-gray-500 flex items-center mt-0.5">
-                                            {/* 🛡️ SOLUCIÓN PARA LA TABLA: Forzamos UTC */}
                                             <Calendar className="w-3 h-3 mr-1" /> {new Date(p.createdAt).toLocaleDateString('es-PE', { timeZone: 'UTC' })}
                                         </p>
                                     </td>
 
-                                    {/* AÑADIDO: Celda de WhatsApp */}
                                     <td className="p-4 text-center">
                                         {waLink ? (
                                             <a
@@ -445,7 +459,6 @@ export default function ListaPagos({
                                                 <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
                                                 <p className="text-xs text-gray-500 flex justify-between mb-1">
                                                     <span className="font-bold">Pago #{i + 1}</span>
-                                                    {/* 🛡️ SOLUCIÓN PARA EL MODAL: Forzamos UTC aquí también */}
                                                     <span>{new Date(detalle.fechaHoraPago).toLocaleString('es-PE', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })}</span>
                                                 </p>
                                                 <div className="flex justify-between items-end">

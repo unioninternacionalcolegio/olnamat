@@ -76,6 +76,7 @@ export default function Sidebar({ userRole }: { userRole: string }) {
         { name: "Configuración", href: "/admin/configuracion", icon: Settings, roles: ["ADMINISTRADOR"] },
         { name: "Fichas Oprticas", href: "/admin/pruebas", icon: Settings, roles: ["ADMINISTRADOR"] },
         { name: "Delegados", href: "/admin/resumen-delegados", icon: Users, roles: ["ADMINISTRADOR"] },
+        { name: "Registrar Delegado", href: "/register/antiguo", icon: Users, roles: ["ADMINISTRADOR"] },
 
         // --- RUTAS DE DELEGADOS Y REPRESENTANTES ---
         { name: "Mi Panel", href: "/delegado", icon: LayoutDashboard, roles: ["DELEGADO", "REPRESENTANTE_IE", "LIBRE"] },
