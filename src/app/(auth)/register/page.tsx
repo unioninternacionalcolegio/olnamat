@@ -441,12 +441,13 @@ export default function RegistroLibrePage() {
                             </div>
                         </div>
                     </div>
-
+                     {/* 
                     <div className="pt-4">
-                        <button type="submit" disabled={loading} className="w-full flex justify-center py-4 px-4 border border-transparent text-sm font-black uppercase tracking-widest rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 shadow-xl transition-all">
+                      <button type="submit" disabled={loading} className="w-full flex justify-center py-4 px-4 border border-transparent text-sm font-black uppercase tracking-widest rounded-xl text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-400 shadow-xl transition-all">
                             {loading ? "Procesando..." : "Enviar Registro y Voucher"}
                         </button>
                     </div>
+                    */}
                 </form>
             </div>
         </div>

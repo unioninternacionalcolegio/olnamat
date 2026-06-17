@@ -225,7 +225,7 @@ export default function RegisterPage() {
                             />
                         </div>
                     </div>
-
+                    {/* 
                     <div className="pt-4">
                         <button
                             type="submit"
@@ -235,8 +235,8 @@ export default function RegisterPage() {
                             {loading ? "Registrando..." : "Crear mi cuenta"}
                         </button>
                     </div>
+                    */}
                 </form>
-
                 <div className="text-center mt-4">
                     <p className="text-sm text-gray-600">
                         ¿Ya tienes cuenta?{' '}
