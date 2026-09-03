@@ -32,32 +32,34 @@ export default function LoginPage() {
             const session = await getSession()
             const userRole = session?.user?.role
 
-            //Repartimos a los usuarios según su gafete
-            //} else if (userRole === "ASISTENTE") {
-            //  router.push("/admin/alumnos") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
-            //} else if (userRole === "REVISADOR") {
-            //  router.push("/admin/notas") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
-            //} else if (userRole === "DELEGADO" || userRole === "REPRESENTANTE_IE") {
-            //  router.push("/delegado") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
-            //} else if (userRole === "LIBRE") {
-            //  router.push("/libre") // <-- Así lo mandas a su propia casa
-            //} else {
-            //  router.push("/") // Por si acaso hay un rol raro
-            //}
+            //Repartimos a los usuarios según su gafete 
             if (userRole === "ADMINISTRADOR") {
                 router.push("/admin")
             } else if (userRole === "ASISTENTE") {
-                router.push("/") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+                router.push("/admin/alumnos") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
             } else if (userRole === "REVISADOR") {
-                router.push("/") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+                router.push("/admin/notas") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
             } else if (userRole === "DELEGADO" || userRole === "REPRESENTANTE_IE") {
-                router.push("/") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+                router.push("/delegado") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
             } else if (userRole === "LIBRE") {
-                router.push("/") // <-- Así lo mandas a su propia casa
+                router.push("/libre") // <-- Así lo mandas a su propia casa
             } else {
                 router.push("/") // Por si acaso hay un rol raro
             }
-            router.refresh()
+            // if (userRole === "ADMINISTRADOR") {
+            //   router.push("/admin")
+            //} else if (userRole === "ASISTENTE") {
+            //  router.push("/") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+            //} else if (userRole === "REVISADOR") {
+            //  router.push("/") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+            // } else if (userRole === "DELEGADO" || userRole === "REPRESENTANTE_IE") {
+            //   router.push("/") // Ojo: Asegúrate de que la carpeta se llame (dashboard)/delegado
+            //} else if (userRole === "LIBRE") {
+            //  router.push("/") // <-- Así lo mandas a su propia casa
+            //} else {
+            //   router.push("/") // Por si acaso hay un rol raro
+            // }
+            //router.refresh()
         }
     }
 

@@ -227,11 +227,11 @@ export default function RegistroLibrePage() {
                             <div className="border-b border-blue-100 pb-2">
                                 <p className="text-[11px] text-blue-600 font-bold uppercase">Yape / Plin</p>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <p className="font-black text-gray-800 text-lg">925 904 377</p>
+                                    <p className="font-black text-gray-800 text-lg">976 851 698</p>
 
                                     <button
                                         type="button"
-                                        onClick={() => manejarCopia("925904377", "yape")}
+                                        onClick={() => manejarCopia("976851698", "yape")}
                                         className="p-1 rounded bg-gray-200 hover:bg-gray-300 transition-colors cursor-pointer"
                                         title="Copiar al portapapeles"
                                     >
@@ -253,7 +253,7 @@ export default function RegistroLibrePage() {
                                     )}
                                 </div>
                                 <p className="text-[10px] text-center text-gray-500 italic mt-2">
-                                    A nombre de: JOSUE RIVEROS CONOZCO
+                                    A nombre de: ENOC SALAZAR ORTEGA
                                 </p>
                             </div>
 
@@ -319,7 +319,7 @@ export default function RegistroLibrePage() {
                                 </div>
                             </div>
 
-                            <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: JOSUE RIVEROS CONOZCO</p>
+                            <p className="text-[10px] text-center text-gray-500 italic mt-2">A nombre de: ENOC SALAZAR </p>
                         </div>
 
                         <button onClick={() => setMostrarCuentas(false)} className="w-full bg-blue-600 text-white font-black py-4 rounded-xl shadow-lg hover:bg-blue-700 uppercase text-sm tracking-widest transition-all">
