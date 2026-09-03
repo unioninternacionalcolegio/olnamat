@@ -236,6 +236,7 @@ export default function RegisterPage() {
                         </button>
                     </div>
                     */}
+                    
                 </form>
                 <div className="text-center mt-4">
                     <p className="text-sm text-gray-600">
